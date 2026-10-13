@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon → "Diagnose": reachable even when the web app does not load -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="diagnostics"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/diag_title">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="de.eltouro.app"
+            android:targetClass="de.eltouro.app.DiagnoseActivity" />
+    </shortcut>
+</shortcuts>

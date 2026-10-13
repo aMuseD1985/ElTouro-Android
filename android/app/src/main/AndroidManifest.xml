@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application
+        android:name=".ElTouroApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -21,6 +22,11 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- long-press the icon → Diagnose -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
 
             <!-- Hand-over after "Sign in with Google" in the system browser: de.eltouro.app://login?t=… -->
             <intent-filter>
@@ -43,6 +49,13 @@
 
         </activity>
 
+        <!-- Diagnose / setup for rides with the display off; exported for the launcher shortcut, shows no secrets -->
+        <activity
+            android:name=".DiagnoseActivity"
+            android:label="@string/diag_title"
+            android:theme="@style/AppTheme.Diagnose"
+            android:exported="true" />
+
         <service
             android:name=".TrackerService"
             android:exported="false"
@@ -64,6 +77,10 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- "Allow all the time": lets the system restart the ride service after it was killed with the display off -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- direct system dialog "let the app run in the background" (navigation app; Play Store reasoning later) -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
