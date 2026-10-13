@@ -170,12 +170,43 @@ class MainActivity : BridgeActivity() {
             val ua = getBridge()?.webView?.settings?.userAgentString
             hops.execute {
                 val cm = CookieManager.getInstance()
-                val r = CookieHop({ cm.getCookie(it) }, { u, c -> cm.setCookie(u, c) }, ua).open(url)
-                cm.flush()
+                val r = CookieHop({ cm.getCookie(it) }, { _, _ -> }, ua).open(url)
                 val target = r.location ?: "$base/"
                 Diag.login("$why: ${Uri.parse(url).path} → " + (if (r.code > 0) "HTTP ${r.code}" else "no connection (${r.error})") +
                     ", ${r.cookies} cookie(s) → ${Uri.parse(target).path}")
-                runOnUiThread { if (!isDestroyed) getBridge()?.webView?.loadUrl(target) }
+                // setCookie is asynchronous: set them on the main thread with a callback and load the target only after the
+                // last one is stored – otherwise Capacitor's proxy may still send the old, anonymous cookie
+                runOnUiThread { storeThenLoad(url, r.setCookies, target) }
+            }
+        }
+    }
+
+    private fun storeThenLoad(url: String, setCookies: List<String>, target: String) {
+        val cm = CookieManager.getInstance()
+        var left = setCookies.size
+        val load = Runnable {
+            cm.flush()
+            if (!isDestroyed) getBridge()?.webView?.loadUrl(target)
+        }
+        if (left == 0) {
+            load.run()
+            return
+        }
+        val timeout = Runnable {
+            if (left > 0) {
+                Diag.log("login: cookie store did not confirm within 3 s – loading anyway")
+                left = 0
+                load.run()
+            }
+        }
+        h.postDelayed(timeout, 3000)
+        for (c in setCookies) {
+            cm.setCookie(url, c) { ok ->
+                if (ok != true) Diag.log("login: cookie store refused a cookie")
+                if (left > 0 && --left == 0) {
+                    h.removeCallbacks(timeout)
+                    load.run()
+                }
             }
         }
     }

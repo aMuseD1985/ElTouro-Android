@@ -19,7 +19,7 @@ class CookieHop(
     private val store: (url: String, setCookie: String) -> Unit,
     private val userAgent: String? = null,
 ) {
-    data class Result(val code: Int, val location: String?, val cookies: Int, val error: String = "")
+    data class Result(val code: Int, val location: String?, val cookies: Int, val error: String = "", val setCookies: List<String> = emptyList())
 
     fun open(url: String): Result = try {
         val c = URL(url).openConnection() as HttpURLConnection
@@ -31,11 +31,11 @@ class CookieHop(
         cookieFor(url)?.takeIf { it.isNotEmpty() }?.let { c.setRequestProperty("Cookie", it) }
         val code = c.responseCode
         val setCookies = c.headerFields.entries.filter { it.key != null && it.key.equals("Set-Cookie", ignoreCase = true) }.flatMap { it.value }
-        for (sc in setCookies) store(url, sc)
+        for (sc in setCookies) store(url, sc)   // the caller may also apply [Result.setCookies] itself (Android: with a callback)
         val location = c.getHeaderField("Location")?.let { URL(URL(url), it).toString() }
         try { (if (code >= 400) c.errorStream else c.inputStream)?.close() } catch (_: Exception) { }
         c.disconnect()
-        Result(code, location, setCookies.size)
+        Result(code, location, setCookies.size, setCookies = setCookies)
     } catch (e: Exception) {
         Result(-1, null, 0, e.javaClass.simpleName)
     }
