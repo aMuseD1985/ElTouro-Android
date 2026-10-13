@@ -49,6 +49,9 @@ Zusammenfassung. Keine Positionen, keine Cookies, kein CSRF-Token.
 `Uploader` (getestet in `UploaderTest`): 2xx → gesendete Punkte löschen; 404/409 → Session kennt der Server nicht mehr, ihre Punkte
 werden verworfen; alles andere (401, 400, 403, 302 Zugangsschutz, 5xx, kein Netz) → behalten und später erneut. Weiterleitungen werden
 nicht verfolgt – vorher landete ein Upload ohne Tester-Cookie auf der Zugangsseite, bekam dort 200 und die Punkte galten als gesendet.
+Fahrtende: `clearSession`/`stop` versuchen den Rest bis zu dreimal in etwa 9 s hochzuladen, bevor die Seite die Aufzeichnung
+beendet – endet die Fahrt in einem Funkloch, kommen die letzten Punkte so oft noch an. Klappt es nicht, bleiben sie im Puffer; der
+Server nimmt sie danach aber nicht mehr an (Aufzeichnung beendet → `{"stored":0}`).
 Offen: Nach 2 h ohne Position beendet der Server die Aufzeichnung (`finishStaleRecordings()`); Punkte, die danach ankommen, nimmt er
 mit `{"stored":0}` an und verwirft sie. Das Log meldet es; ob der Server solche Fahrten wieder öffnen soll, entscheidet Marco.
 
@@ -58,8 +61,9 @@ Voraussetzung: der Server-Teil von M2 (Patch `web-repo/` → Repo `ElTouro`, Mig
 1. Diagnose: „Geräteschlüssel für den Upload: ja“ (kommt nach dem ersten Fahrtstart innerhalb einer Minute).
 2. Fahrt mit Aufzeichnung starten, 2 Minuten fahren, dann **Flugmodus an** für 3–5 Minuten weiterfahren, Flugmodus aus.
    Diagnose: Punkte im Puffer steigen und gehen danach auf 0; `/drives` zeigt die Fahrt ohne Lücke.
-3. Während der Fahrt die App in den letzten Apps wegwischen und in den App-Einstellungen „Stopp erzwingen“ → bis zu 10 min warten
-   (Watchdog), Log zeigt „watchdog: … starting it again“. Die Fahrt läuft unter derselben Aufzeichnung weiter.
+3. Während der Fahrt die App in den letzten Apps wegwischen (ohne Schloss). Beendet HyperOS dabei den Dienst, zeigt das Log
+   „restarted by the system“ oder nach bis zu 10 min „watchdog: … starting it again“; die Fahrt läuft unter derselben Aufzeichnung
+   weiter. **Nicht „Stopp erzwingen“** – das löscht absichtlich auch den Watchdog-Alarm, Android startet danach nichts mehr von selbst.
 4. Handy während einer aktiven Fahrt neu starten, entsperren: Benachrichtigung „ElTouro …“ erscheint wieder, Log „reboot“.
 5. Abmelden in der App: Diagnose zeigt „Geräteschlüssel: nein“.
 

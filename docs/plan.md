@@ -76,6 +76,17 @@ Rückfall `/api/live`. Regeln bleiben allein serverseitig.
 Native Compose-Bildschirme erst, wenn M1–M7 stabil sind. Kein Redesign der Web-Oberfläche. Play Store später (eigener geheimer
 Upload-Schlüssel, Datenschutz-Angaben, Begründung für Hintergrund-Standort) – jetzt nur APK.
 
+## Code-Review (13.10.2026, nach M2)
+
+Eigenes Review von M1/M2 vor dem Gerätetest; behoben: Hinweisdialog auf einer schon schließenden Activity (Absturz beim
+Fahrtstart möglich), Registrierung des Geräteschlüssels wurde gegen einen Server ohne Endpunkt jede Minute versucht und
+protokolliert (jetzt alle 10 min, nur Änderungen im Log), letzte Punkte bei Fahrtende im Funkloch (jetzt drei Versuche in ~9 s
+vor dem `finish` der Seite), Testschritt „Stopp erzwingen“ (konnte nie klappen), Datenschutztext nannte das gespeicherte
+Schlüssel-Präfix nicht. Geprüft und in Ordnung: Reihenfolge Puffer-Upload → `finish` in `navigate.js` und `free_ride.js`,
+Uploader ohne Endlosschleife (Teilannahme `stored < gesendet` wird gelöscht), Basic-Auth vor Beta/Test stört die
+Schlüssel-Erkennung nicht, `BOOT_COMPLETED` ist geschützt, FileProvider gibt nur `diag/` und nur pro URI frei.
+Nicht geprüft werden kann ohne Gerät: alles, was HyperOS tatsächlich tut – dafür ist M1 da.
+
 ## Offene Entscheidungen für Marco
 
 1. `CONSENT_VERSION` – wann erhöhen (Vorschlag: einmal mit M5).

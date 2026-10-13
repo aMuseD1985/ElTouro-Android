@@ -121,6 +121,7 @@ object Setup {
      * The ride is never held up by it.
      */
     fun maybeShowHint(activity: Activity) {
+        if (activity.isFinishing || activity.isDestroyed) return   // a dialog on a dying activity crashes (BadTokenException)
         if (complete(activity)) return
         val p = activity.getSharedPreferences("eltouro_diag", Context.MODE_PRIVATE)
         val last = p.getLong("hintShownAt", 0L)

@@ -13,6 +13,9 @@ import de.eltouro.app.ride.Http
  */
 object DeviceKey {
     private const val PREFS = "eltouro_device"
+    private const val RETRY_AFTER_FAILURE_MS = 10 * 60_000L   // e.g. a server without /api/app/device yet
+    @Volatile private var lastFailureAt = 0L
+    @Volatile private var lastFailure = ""
 
     fun get(ctx: Context): String? {
         val p = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -25,6 +28,7 @@ object DeviceKey {
         if (get(ctx) != null) return true
         val base = RideState.baseUrl
         if (base.isEmpty() || RideState.csrf.isEmpty()) return false
+        if (System.currentTimeMillis() - lastFailureAt < RETRY_AFTER_FAILURE_MS) return false
         val headers = HashMap<String, String>()
         headers["X-CSRF"] = RideState.csrf
         CookieManager.getInstance().getCookie(base)?.let { headers["Cookie"] = it }
@@ -32,9 +36,14 @@ object DeviceKey {
         val r = Http.postJson("$base/api/app/device", json, headers)
         val key = Regex("\"token\"\\s*:\\s*\"(eld_[0-9a-f]{40})\"").find(r.body)?.groupValues?.get(1)
         if (key == null) {
-            Diag.log("device key: registration failed – ${if (r.code > 0) "HTTP ${r.code}" else r.error}")
+            val why = if (r.code > 0) "HTTP ${r.code}" else r.error
+            if (why != lastFailure) Diag.log("device key: registration failed – $why (next try in 10 min; upload uses cookie + CSRF meanwhile)")
+            lastFailure = why
+            lastFailureAt = System.currentTimeMillis()
             return false
         }
+        lastFailure = ""
+        lastFailureAt = 0L
         ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("key", key).putString("host", Uri.parse(base).host).apply()
         Diag.log("device key: registered (${key.take(8)}…)")

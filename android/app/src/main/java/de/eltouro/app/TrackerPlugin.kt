@@ -105,12 +105,22 @@ class TrackerPlugin : Plugin() {
         call.resolve()
     }
 
+    /** Uploads what is left before the page finishes the recording – up to three tries within about 9 s (dead zone at the end). */
+    private fun flushBeforeFinish(svc: TrackerService?) {
+        if (svc == null || RideState.baseUrl.isEmpty()) return
+        for (attempt in 1..3) {
+            if (svc.flushNow()) return
+            if (attempt < 3) Thread.sleep(3000)
+        }
+        Diag.log("page: ride ends with ${Diag.bufferSize} points not uploaded – they go out with the next ride if the server still takes them")
+    }
+
     @PluginMethod
     fun clearSession(call: PluginCall) {
         val svc = RideState.service
         Diag.pageCall("clearSession")
         Thread {
-            svc?.flushNow()
+            flushBeforeFinish(svc)
             RideState.session = 0
             RideState.save(context)
             call.resolve()
@@ -122,7 +132,7 @@ class TrackerPlugin : Plugin() {
         val svc = RideState.service
         Diag.pageCall("stop")
         Thread {
-            svc?.flushNow()
+            flushBeforeFinish(svc)
             RideState.session = 0
             RideState.active = false
             RideState.save(context)
