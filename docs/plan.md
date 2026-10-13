@@ -92,7 +92,7 @@ Nicht geprüft werden kann ohne Gerät: alles, was HyperOS tatsächlich tut – 
 1. `CONSENT_VERSION` – wann erhöhen (Vorschlag: einmal mit M5).
 2. Lange Funklöcher: nach 2 h ohne Position beendet der Server die Aufzeichnung (`finishStaleRecordings()`), später ankommende
    Punkte werden mit `{"stored":0}` verworfen. Soll der Server eine solche Fahrt wieder öffnen, wenn die App nachliefert?
-3. Ob `app.eltouro.de` schon existiert – bis dahin bauen alle APKs gegen `https://test.eltouro.de`.
+3. ~~Ob `app.eltouro.de` schon existiert~~ – ja. **Alle APKs bauen standardmäßig gegen Produktion `https://app.eltouro.de`** (Marcos Vorgabe 13.10.); test nur bewusst per *Run workflow*.
 
 ## Arbeitsweise
 

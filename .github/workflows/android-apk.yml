@@ -10,7 +10,7 @@ on:
     inputs:
       url:
         description: 'Adresse der Web-App, die die APK lädt'
-        default: 'https://test.eltouro.de'
+        default: 'https://app.eltouro.de'
   push:
     paths-ignore: ['docs/**', '**/*.md']
   pull_request:
@@ -19,7 +19,7 @@ jobs:
   apk:
     runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to 26.04 from 2026-10-19, the Android SDK layout may differ
     env:
-      ELTOURO_URL: ${{ github.event.inputs.url || 'https://test.eltouro.de' }}
+      ELTOURO_URL: ${{ github.event.inputs.url || 'https://app.eltouro.de' }}
     steps:
       - uses: actions/checkout@v5
 

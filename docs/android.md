@@ -1,13 +1,13 @@
 # ElTouro Android-App (Test-APK)
 
-Die App ist eine **Capacitor-Hülle** (dieses Repo): ein WebView, der die Web-App lädt (Standard `https://test.eltouro.de`), plus
+Die App ist eine **Capacitor-Hülle** (dieses Repo): ein WebView, der die Web-App lädt (Standard **Produktion `https://app.eltouro.de`**; test nur bewusst per Run workflow), plus
 ein nativer Kern in **Kotlin** für das, was der Browser nicht kann – Aufzeichnen und Navigieren mit ausgeschaltetem Display.
 Arbeitspaket und Reihenfolge der Meilensteine: `docs/android-native-prompt.md`; Schnittstelle zur Web-App: `docs/app-interface.md`.
 Die Web-App, ihre Endpunkte und die Rechtstexte liegen im Repo `aMuseD1985/ElTouro`.
 
 ## APK bekommen (ohne Android Studio)
 
-1. GitHub → Repo `aMuseD1985/ElTouro-Android` → **Actions** → **Android APK** → *Run workflow* (Adresse: `https://test.eltouro.de` oder `https://app.eltouro.de`).
+1. GitHub → Repo `aMuseD1985/ElTouro-Android` → **Actions** → **Android APK** → *Run workflow* (Adresse: Standard `https://app.eltouro.de` = Produktion; für Tests gegen den Testserver `https://test.eltouro.de` eintragen).
    Der Bau läuft auch automatisch bei jedem Push.
 2. Nach ca. 5–8 Minuten am Lauf unter **Artifacts** `eltouro-apk` herunterladen (ZIP mit `app-debug.apk`).
    Per Terminal: `gh run download -R aMuseD1985/ElTouro-Android -n eltouro-apk`
@@ -92,7 +92,7 @@ Voraussetzung: der Server-Teil von M2 (Patch `web-repo/` → Repo `ElTouro`, Mig
 ## Bauen (selbst)
 
 ```
-npm ci && ELTOURO_URL=https://test.eltouro.de npx cap sync android
+npm ci && ELTOURO_URL=https://app.eltouro.de npx cap sync android
 cd android && ./gradlew testDebugUnitTest assembleDebug   # braucht JDK 21 + Android SDK (36); Kotlin 2.2.20 kommt über Gradle
 ```
 

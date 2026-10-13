@@ -1,6 +1,6 @@
 // ElTouro Android shell. The app itself is the web app (https://…eltouro.de); this shell adds background recording.
 // Which environment the APK talks to: ELTOURO_URL=https://app.eltouro.de npx cap sync android (default: the test server)
-const url = (process.env.ELTOURO_URL || 'https://test.eltouro.de').replace(/\/+$/, '');
+const url = (process.env.ELTOURO_URL || 'https://app.eltouro.de').replace(/\/+$/, '');
 const host = new URL(url).host;
 
 module.exports = {

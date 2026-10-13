@@ -29,6 +29,7 @@ alles, was Hintergrund, Sensoren oder System braucht, ist nativ in Kotlin.
 
 ## Harte Regeln
 
+- **APKs gehen immer gegen Produktion** (`https://app.eltouro.de`) – Standard in `capacitor.config.js` und `android-apk.yml` (Marcos Vorgabe). Test-URL nur, wenn Marco es ausdrücklich verlangt (Run workflow mit Adresse).
 - Kotlin, Code und Kommentare englisch; UI-Texte in `res/values/*.xml` (EN) **und** `res/values-de/*.xml` (DE), gleiche Schlüssel.
   Duzen, **kein Gendern**, Marke „ElTouro“ in einem Wort, Touro trägt immer seine Sonnenbrille.
 - Keine neuen Tracker oder Drittanbieter; einzige geplante Ausnahme: Firebase Cloud Messaging (M5). Bibliotheken nur mit Grund;
