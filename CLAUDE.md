@@ -1,6 +1,6 @@
 # ElTouro-Android – Übergabe für Claude
 
-Einstiegspunkt für jede Session in diesem Repo. Erst lesen, dann arbeiten. Stand: 13.10.2026.
+Einstiegspunkt für jede Session in diesem Repo. Erst lesen, dann arbeiten. Stand: 14.10.2026.
 Ansprechpartner und Product Owner: Marco. Kommunikation auf Deutsch, direkt und technisch.
 
 ## Worum es geht
@@ -53,7 +53,7 @@ unter `android/app/src/test/`. Marco testet auf einem **Xiaomi 15 Ultra (HyperOS
 |---|---|
 | M1 Diagnose + Härtung | gebaut, CI grün (erster Lauf 13.10., 21 Unit-Tests, keine Warnungen), APK `versionCode` 1003; **Gerätetest auf dem Xiaomi offen** – Marco schickt das Log |
 | M2 Aufzeichnung nativ (SQLite-Puffer, Geräteschlüssel, Watchdog) | App-Teil gebaut und in derselben APK; läuft bis zum Server-Teil mit Cookie + CSRF. Server-Teil: `docs/handoff/` (Tabelle `app_devices`, `/api/app/device`, `track.php`, Datenschutz „Android-App“; lokal gegen MariaDB getestet; `CONSENT_VERSION` bewusst nicht erhöht) – **Server-Teil im Web-Repo eingespielt (`fc55030`, test automatisch; live mit Marcos ZIP) – Antworten und Hinweise: `docs/handoff/from-web.md`** |
-| Gerätetest 1 → Aufgaben | `docs/handoff/aufgaben-nach-geraetetest-1.md`: **1 Login bei Kaltstart, 2 Diagnose belegt den Pfad – gebaut**; 3–5 je nach Log (a/b/c), 6 App-Gefühl; Testablauf „Gerätetest 2“ in `docs/android.md` |
+| Gerätetest 1 → Aufgaben | `docs/handoff/aufgaben-nach-geraetetest-1.md`. **Aufgabe 1 Login:** Ursache gefunden und lokal gegen `app_login.php` nachgestellt – Capacitors Proxy verliert das Cookie der 303 (`docs/plan.md`, Nachtrag); Fix `web/CookieHop.kt` + Cookies mit Callback (APK `versionCode` 1009). Marco meldete bei 1008 „keine Änderung“; **1009 ungetestet, Log fehlt** – nächster Schritt: Version 1009 in Diagnose prüfen, Log leeren, einmal anmelden, „Log teilen“ (Abschnitt „Anmeldung“ zeigt jede Übergabe mit HTTP-Status). **Aufgabe 2 Diagnose-Pfad: gebaut**, Log einer 10-min-Fahrt mit Display aus fehlt noch → entscheidet 3/4/5. 6 App-Gefühl offen. **Logout-Fehler auf der Webseite** (fehlende Migration `app_devices`): `docs/handoff/logout-fehler.md` + Patch |
 | M3 Fahrmodus nativ (Navigation + Sprache) | offen – **erst wenn Aufgaben 1–5 am Gerät grün sind**; Port von `navigate.js` (Stand `?v=39` lesen) mit Golden-Tests |
 | M4 Kamera/Dateien, Teilen, Deep-Links | offen |
 | M5 FCM-Push | offen – Marco legt das Firebase-Projekt an |
