@@ -46,7 +46,28 @@ jobs:
 
       - name: Unit-Tests und APK bauen
         working-directory: android
-        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon testDebugUnitTest assembleDebug 2>&1 | tee ../build.log
+
+      # Kotlin errors/warnings and the test count as annotations – readable through the API without the raw log
+      - name: Ergebnis als Annotations
+        if: always()
+        run: |
+          grep -E '^e: ' build.log | head -10 | sed -E 's#^e: file://[^ ]*/android/app/src/#e: #' | while IFS= read -r l; do echo "::error::$l"; done || true
+          grep -E '^w: ' build.log | head -10 | sed -E 's#^w: file://[^ ]*/android/app/src/#w: #' | while IFS= read -r l; do echo "::warning::$l"; done || true
+          grep -E '^(FAILURE|\* What went wrong)' -A3 build.log | head -8 | tr '\n' ' ' | sed 's/^/::error::/' || true
+          python3 - <<'PY'
+          import glob, xml.etree.ElementTree as ET
+          t = f = s = 0
+          for x in glob.glob('android/app/build/test-results/testDebugUnitTest/*.xml'):
+              r = ET.parse(x).getroot()
+              t += int(r.get('tests', 0)); f += int(r.get('failures', 0)) + int(r.get('errors', 0)); s += int(r.get('skipped', 0))
+              for c in r.iter('testcase'):
+                  for e in list(c.findall('failure')) + list(c.findall('error')):
+                      print(f"::error::{c.get('classname')}.{c.get('name')}: {(e.get('message') or '')[:200]}")
+          print(f"::notice::Unit-Tests: {t} gelaufen, {f} fehlgeschlagen, {s} übersprungen")
+          PY
 
       - name: Testbericht bei Fehlern
         if: failure()
