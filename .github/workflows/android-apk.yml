@@ -1,0 +1,63 @@
+name: Android APK
+
+# Baut die ElTouro-App als installierbare Test-APK – bei jedem Push (jeder Branch) und von Hand:
+# Actions → Android APK → Run workflow. Vorher laufen die JVM-Unit-Tests. Die APK steht danach als Artefakt
+# "eltouro-apk" am Lauf, bei roten Tests der Testbericht als "eltouro-tests". In diesem Repo wird nichts deployt.
+# Die App lädt die Web-App von der angegebenen Adresse (Standard: Testserver).
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Adresse der Web-App, die die APK lädt'
+        default: 'https://test.eltouro.de'
+  push:
+    paths-ignore: ['docs/**', '**/*.md']
+  pull_request:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      ELTOURO_URL: ${{ github.event.inputs.url || 'https://test.eltouro.de' }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Android SDK vorbereiten (auf dem Runner vorhanden)
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" | tail -3
+
+      - name: Capacitor synchronisieren
+        run: |
+          npm ci
+          npx cap sync android
+
+      - name: Unit-Tests und APK bauen
+        working-directory: android
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug
+
+      - name: Testbericht bei Fehlern
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: eltouro-tests
+          path: android/app/build/reports/tests/
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: eltouro-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

@@ -1,0 +1,62 @@
+# ElTouro-Android – Übergabe für Claude
+
+Einstiegspunkt für jede Session in diesem Repo. Erst lesen, dann arbeiten. Stand: 13.10.2026.
+Ansprechpartner und Product Owner: Marco. Kommunikation auf Deutsch, direkt und technisch.
+
+## Worum es geht
+
+Die Android-App von ElTouro (Community für E-Scooter-Fahrer). Hybrid: Inhalte bleiben die Web-App im WebView (Capacitor 8),
+alles, was Hintergrund, Sensoren oder System braucht, ist nativ in Kotlin. Ziel und Reihenfolge: `docs/android-native-prompt.md`.
+Aufbau, Diagnose, Testlisten: `docs/android.md`. Schnittstelle zur Web-App: `docs/app-interface.md`.
+
+## Zwei Repos
+
+- **Hier:** nur die App – `package.json`/`capacitor.config.js`/`www/` (Capacitor), `android/` (Gradle-Projekt), CI, Doku.
+- **`aMuseD1985/ElTouro`:** Web-App, alle Endpunkte (`track.php`, `app_device.php`, `app_login.php` …), `assets/native_tracker.js`
+  (JS-Seite der Brücke), `assets/navigate.js`/`voice.js`/`voice_lib.php` (Vorlage für den nativen Fahrmodus), Rechtstexte,
+  Migrationen. Dort deployt jeder Push auf `main` sofort auf test.eltouro.de – **Server-Änderungen gehen als Patch an Marco**,
+  er prüft PHP und Rechtstexte und spielt sie ein. Lesen darf diese Instanz das Web-Repo, schreiben nicht.
+- Hier deployt nichts automatisch; die CI baut bei jedem Push eine APK.
+
+## Harte Regeln
+
+- Kotlin, Code und Kommentare englisch; UI-Texte in `res/values/*.xml` (EN) **und** `res/values-de/*.xml` (DE), gleiche Schlüssel.
+  Duzen, **kein Gendern**, Marke „ElTouro“ in einem Wort, Touro trägt immer seine Sonnenbrille.
+- Keine neuen Tracker oder Drittanbieter; einzige geplante Ausnahme: Firebase Cloud Messaging (M5). Bibliotheken nur mit Grund;
+  Plattform-APIs bevorzugt (M2: SQLite direkt statt Room, AlarmManager statt WorkManager).
+- Die Brücke `EltouroTracker` und die Endpunkte nur ergänzen, nie ändern (`docs/app-interface.md`).
+- **Signierschlüssel `android/app/debug.keystore` nie ersetzen** – sonst lässt sich die APK nicht mehr über die alte installieren.
+  Der Play-Store-Schlüssel wird ein anderer, geheimer.
+- Eine Fahrt endet nur, wenn der Fahrer sie beendet. Standort nur, solange eine Fahrt läuft; gespeichert nur bei „Fahrt aufzeichnen“.
+- Datenflüsse geändert → Datenschutz-Patch fürs Web-Repo (siehe `docs/app-interface.md`, Abschnitt 4).
+
+## Bauen und testen
+
+Kein Android Studio, kein Gerät: gebaut wird in der CI (`android-apk.yml`: `testDebugUnitTest assembleDebug`, Artefakt
+`eltouro-apk`). Logik, die sich testen lässt, liegt Android-frei in `diag/`, `ride/` (später `nav/`, `voice/`) und hat JVM-Tests
+unter `android/app/src/test/`. Marco testet auf einem **Xiaomi 15 Ultra (HyperOS)** und schickt das Log aus „Diagnose → Log teilen“.
+
+## Stand
+
+| Meilenstein | Stand |
+|---|---|
+| M1 Diagnose + Härtung | gebaut (Commit „Android M1“), CI und Gerätetest offen |
+| M2 Aufzeichnung nativ (SQLite-Puffer, Geräteschlüssel, Watchdog) | App-Teil gebaut; Server-Teil liegt als Patch beim Web-Repo (Tabelle `app_devices`, `/api/app/device`, `track.php`, Datenschutz „Android-App“; `CONSENT_VERSION` bewusst nicht erhöht – einmal mit FCM) |
+| M3 Fahrmodus nativ (Navigation + Sprache) | offen – Port von `navigate.js` mit Golden-Tests |
+| M4 Kamera/Dateien, Teilen, Deep-Links | offen |
+| M5 FCM-Push | offen – Marco legt das Firebase-Projekt an |
+| M6 Widgets + Hintergrund-Prüfung | offen |
+| M7 Live per WebSocket | offen |
+
+## Stolperfallen, die schon einmal passiert sind
+
+- Der alte Dienst hielt Session und Puffer nur im RAM: nach einem Neustart durch das System war die Session 0 und jeder Punkt
+  wurde verworfen. Zustand gehört auf Platte (`RideState`, `ride.db`).
+- `HttpURLConnection` folgt Weiterleitungen: ein Upload ohne Tester-Cookie landete auf `/access`, bekam 200 und galt als
+  gesendet. `Http.postJson` folgt keinen Weiterleitungen.
+- Netzwerk im `onDestroy` läuft auf dem Main-Thread und scheitert immer – auf den Dienst-Thread legen.
+- Die Wichtigkeit eines bestehenden Benachrichtigungskanals lässt sich nicht erhöhen → neue Kanal-ID (`eltouro_ride_v2`).
+- Android 12+: Foreground-Service aus dem Hintergrund (Neustart, Watchdog, Booten) nur mit Akku-Ausnahme; Typ Standort
+  zusätzlich nur mit „Immer zulassen“. `startForeground` immer in try/catch und protokollieren.
+- Kotlin 2.2: `kotlinOptions {}` ist ein Fehler, `kotlin { compilerOptions { jvmTarget… } }` nehmen (JVM 21 wie Capacitor).
+- `capacitor.build.gradle` und `capacitor.settings.gradle` erzeugt `npx cap sync` neu – nicht von Hand ändern.
