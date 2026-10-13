@@ -33,7 +33,7 @@ fi
 echo "✓ Typprüfung"
 
 echo "== JVM-Unit-Tests (Android-freie Pakete)"
-MAIN=$(grep -L -r -E '^import (android|androidx|com\.google|com\.getcapacitor)|\bR\.' "$SRC" --include=*.kt | grep -E '/(diag|nav|voice|core|ride)/' || true)
+MAIN=$(grep -L -r -E '^import (android|androidx|com\.google|com\.getcapacitor)|\bR\.' "$SRC" --include=*.kt | grep -E '/(diag|nav|voice|core|ride|web)/' || true)
 TESTS=$(find "$REPO/android/app/src/test/java/de" -name '*.kt')
 "$KOTLINC" -nowarn -cp "$C/shim" -d "$C/jvm" $MAIN $TESTS 2>&1 | grep -E 'error:' && { echo "✗ Tests kompilieren nicht"; exit 1; }
 CLASSES=$(cd "$C/jvm" && find . -name '*Test.class' | sed 's#^\./##; s#\.class$##; s#/#.#g')

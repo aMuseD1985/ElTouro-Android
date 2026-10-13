@@ -24,6 +24,10 @@ JS-Seite: `assets/native_tracker.js` im Web-Repo (`window.ElTouroNative`). Nativ
 
 Ereignis `location`: `{lat, lng, acc, heading?, speedMs?, t}` (jede Position, solange die Seite lebt).
 
+**GET-Seiten, die anmelden** (Sitzungs-Cookie in einer Weiterleitung): `/auth/app` und `/verify`. Die App öffnet sie selbst
+(`CookieHop`) statt über die WebView, weil Capacitors Proxy das Cookie einer Weiterleitung verliert. Kommt im Web-Repo eine
+weitere GET-Seite dazu, die Cookies setzt und weiterleitet, muss sie in `CookieHop.SIGN_IN_PATHS` (oder als POST gebaut werden).
+
 Die App fragt außerdem jede geladene Seite per `evaluateJavascript` ab (`BridgeProbe` – Diagnose): `location.pathname`,
 `window.ElTouroNative.available()`, `Capacitor.isNativePlatform()` und `document.getElementById('app-texts').dataset.user`
 (`'1'` = angemeldet). Diese Namen bitte nicht ändern.

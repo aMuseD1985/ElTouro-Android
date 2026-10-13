@@ -69,6 +69,13 @@ CI-Läufe und Annotations: `GET /repos/aMuseD1985/ElTouro-Android/actions/runs`,
 
 ## Stolperfallen, die schon einmal passiert sind
 
+- **Capacitor holt jede HTML-Seite der Remote-URL selbst** (`WebViewLocalServer.handleProxyRequest`, um die Bridge einzufügen):
+  dessen `HttpURLConnection` folgt Weiterleitungen, schickt dabei das *alte* Cookie und übernimmt nur die `Set-Cookie` der
+  *letzten* Antwort. Seiten, die per GET anmelden und weiterleiten (`/auth/app`, `/verify`), verloren so das Sitzungs-Cookie –
+  Google-Login und „angemeldet bleiben“ klappten nie zuverlässig („doppelter Login“). Diese Pfade öffnet die App deshalb selbst
+  (`web/CookieHop.kt`, `CookieHop.SIGN_IN_PATHS`), auch wenn die Seite dorthin navigiert. Neue GET-Seiten im Web-Repo, die Cookies
+  setzen und weiterleiten, gehören in diese Liste (oder werden POST).
+
 - Der alte Dienst hielt Session und Puffer nur im RAM: nach einem Neustart durch das System war die Session 0 und jeder Punkt
   wurde verworfen. Zustand gehört auf Platte (`RideState`, `ride.db`).
 - `HttpURLConnection` folgt Weiterleitungen: ein Upload ohne Tester-Cookie landete auf `/access`, bekam 200 und galt als

@@ -56,6 +56,9 @@ Zusammenfassung. Keine Positionen, keine Cookies, kein CSRF-Token.
 Die App fragt jede geladene Seite selbst (`BridgeProbe`, kein Web-Patch nötig) und protokolliert jeden Seitenwechsel nur mit Pfad.
 
 Testablauf:
+Seit „CookieHop“ zeigt *Anmeldung → Letztes Anmelde-Ereignis* jede Übergabe mit Ergebnis, z. B.
+„Google hand-over (app running): /auth/app → HTTP 303, 1 cookie(s) → /“. 303 mit Cookie = Server hat angemeldet; danach muss
+*Angemeldet auf der Seite* ✓ zeigen.
 1. **Kaltstart-Login:** App aus den letzten Apps wischen → öffnen → „Mit Google anmelden“ → im Browser fertig → zurück in der App:
    angemeldet? Dann App wischen → öffnen → noch angemeldet? Danach Handy-Einstellungen → Dunkelmodus umschalten → App bleibt angemeldet?
 2. **10 min „Freie Fahrt“ mit Aufzeichnung, Display aus**, Handy in der Tasche → `/drives`: hat die Linie Kurven?

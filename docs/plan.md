@@ -99,6 +99,15 @@ Wettlauf beim Kaltstart (anonymes Session-Cookie der ersten Seite gegen das der 
 bei Neuaufbau werden nicht wiederholt, jeder Login-Token wird nur einmal eingelöst (`UsedLinks`, SHA-256), die erste Seite wird
 vor der Übergabe gestoppt, und ohne Sitzungs-Cookie meldet die App die WebView selbst mit dem „angemeldet bleiben“-Token an.
 
+**Nachtrag (Gerätetest 2: „immer noch doppelter Login“): die eigentliche Ursache.** Capacitor lädt bei einer Remote-`server.url`
+jede HTML-Seite selbst (`WebViewLocalServer.handleProxyRequest`), folgt Weiterleitungen mit dem alten Cookie und übernimmt nur die
+`Set-Cookie` der letzten Antwort. `/auth/app` setzt das Anmelde-Cookie in seiner 303 → verloren, die Folgeseite vergibt eine neue
+anonyme Sitzung. Lokal mit dem echten `app_login.php` nachgestellt: so wie Capacitor → nicht angemeldet; Cookie der 303 übernehmen
+und dann laden → angemeldet. Betroffen waren Google-Übergabe, „angemeldet bleiben“ (`?r=`) und der Bestätigungslink `/verify`
+(Formular-Logins sind POST, den lässt Capacitor in Ruhe). Fix: `web/CookieHop.kt` – diese Pfade ruft die App selbst ohne
+Weiterleitung auf, nimmt die Cookies der Antwort in den Cookie-Speicher der WebView und lädt dann das Ziel; Navigationen der Seite
+dorthin fängt `SignInAwareClient` ab; ausgeführt erst nach der ersten fertigen Seite (deren anonymes Cookie käme sonst danach).
+
 ## Offene Entscheidungen für Marco
 
 1. `CONSENT_VERSION` – wann erhöhen (Vorschlag: einmal mit M5).

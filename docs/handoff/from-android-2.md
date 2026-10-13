@@ -16,3 +16,16 @@ Start-Intents aus den letzten Apps oder bei Neuaufbau der Activity, jeder Token 
 `docs/app-interface.md`).
 
 Nächster möglicher Web-Patch erst nach Marcos Log: Fall (a) → `native_tracker.js`.
+
+## Nachtrag: die eigentliche Login-Ursache (nach Marcos zweitem Test)
+
+Capacitor 8 holt bei einer Remote-`server.url` jede HTML-Seite selbst (`WebViewLocalServer.handleProxyRequest`, wegen der
+Bridge-Einfügung). Dessen `HttpURLConnection` folgt Weiterleitungen mit dem **alten** Cookie und übernimmt nur die `Set-Cookie` der
+**letzten** Antwort. `/auth/app` setzt das Anmelde-Cookie in der 303 → in der WebView verloren. Lokal mit eurem `app_login.php`
+nachgestellt (curl: so wie Capacitor → anonym; 303-Cookie übernehmen → angemeldet). Betroffen: Google-Übergabe, `?r=` aus
+`native_tracker.js` und `/verify`. Die App öffnet diese Pfade jetzt selbst (`CookieHop`), auch wenn die Seite per
+`location.replace` dorthin navigiert – **keine Änderung im Web-Repo nötig**.
+
+**Bitte künftig:** GET-Seiten, die Cookies setzen und dann weiterleiten, vermeiden (lieber POST) – oder der Android-Session
+Bescheid geben, damit sie in `CookieHop.SIGN_IN_PATHS` kommen (steht auch in `docs/app-interface.md`). Weiterleitungen, die nur das
+bestehende Cookie verlängern (gleiche Session-ID), sind unkritisch.

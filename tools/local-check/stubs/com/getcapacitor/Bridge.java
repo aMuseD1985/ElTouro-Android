@@ -1,1 +1,1 @@
-package com.getcapacitor; public class Bridge { public android.webkit.WebView getWebView() { return null; } public CapConfig getConfig() { return null; } public void addWebViewListener(WebViewListener l) {} }
+package com.getcapacitor; public class Bridge { public android.webkit.WebView getWebView() { return null; } public CapConfig getConfig() { return null; } public void addWebViewListener(WebViewListener l) {} public void setWebViewClient(BridgeWebViewClient c) {} public BridgeWebViewClient getWebViewClient() { return null; } }

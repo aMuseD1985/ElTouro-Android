@@ -10,12 +10,17 @@ import android.os.Looper
 import android.os.SystemClock
 import android.webkit.CookieManager
 import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebResourceRequest
 import android.webkit.WebView
+import com.getcapacitor.Bridge
 import com.getcapacitor.BridgeActivity
+import com.getcapacitor.BridgeWebViewClient
 import com.getcapacitor.WebViewListener
 import de.eltouro.app.diag.BridgeProbe
 import de.eltouro.app.diag.Diag
 import de.eltouro.app.diag.UsedLinks
+import de.eltouro.app.web.CookieHop
+import java.util.concurrent.Executors
 
 class MainActivity : BridgeActivity() {
     private val heartbeat = WebViewHeartbeat()
@@ -24,15 +29,22 @@ class MainActivity : BridgeActivity() {
     private var recreated = false       // configuration change or restore after the process was killed
     private var linkHandled = false
     private var lastProbe = ""
+    private var firstPageLoaded = false   // the bridge's first page (and its anonymous cookie, if any) is done
+    private val pending = ArrayList<() -> Unit>()
+    private val hops = Executors.newSingleThreadExecutor()
+    private var lastRememberHopAt = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         recreated = savedInstanceState != null
         creating = true
         registerPlugin(TrackerPlugin::class.java)
-        super.onCreate(savedInstanceState)   // → load() → onNewIntent(getIntent()) → handleLink (cold start)
+        super.onCreate(savedInstanceState)   // → BridgeActivity.load() → onNewIntent(getIntent()) → handleLink (cold start)
         creating = false
         CookieManager.getInstance().setAcceptCookie(true)
-        getBridge()?.addWebViewListener(pageListener)
+        getBridge()?.let { b ->
+            b.addWebViewListener(pageListener)
+            b.setWebViewClient(SignInAwareClient(b))   // pages that sign in never go through Capacitor's proxy (see CookieHop)
+        }
         if (!linkHandled) restoreSignIn()
         heartbeat.start()
     }
@@ -63,6 +75,7 @@ class MainActivity : BridgeActivity() {
     override fun onDestroy() {
         heartbeat.stop()
         h.removeCallbacksAndMessages(null)
+        hops.shutdown()
         if (RideState.service != null) Diag.log("activity: destroyed")
         super.onDestroy()
     }
@@ -104,15 +117,20 @@ class MainActivity : BridgeActivity() {
             used.add(t)
             prefs.edit().putString("used", used.serialize()).commit()   // commit: must be on disk before the page loads
             val base = bridge.config.serverUrl ?: return false
-            Diag.login("Google hand-over ($how) → /auth/app")
-            base.replace(Regex("/+$"), "") + "/auth/app?t=" + t + "&next=" + Uri.encode(data.getQueryParameter("next") ?: "/")
+            openNatively(base.replace(Regex("/+$"), "") + "/auth/app?t=" + t + "&next=" + Uri.encode(data.getQueryParameter("next") ?: "/"),
+                "Google hand-over ($how)")
+            return true
         } else if ("https" == data.scheme && data.host?.let { it in OWN_HOSTS } == true) {
             Diag.log("link: $shown ($how)")
+            if (CookieHop.isSignInPath(data.path)) {   // e.g. the confirmation link from the registration mail (/verify)
+                openNatively(data.toString(), "link ${data.path} ($how)")
+                return true
+            }
             data.toString()
         } else {
             return false
         }
-        load(url, coldStart)
+        navigate(url)
         return true
     }
 
@@ -127,23 +145,77 @@ class MainActivity : BridgeActivity() {
         val remember = Remember.get(this)
         Diag.log("start: ${if (recreated) "activity recreated" else "cold start"} · session cookie=${if (hasSession) "yes" else "no"}" +
             " · stay signed in=${if (remember != null) "yes" else "no"}")
-        if (!hasSession && remember != null) {
-            Diag.login("no session cookie – signing in with the stay-signed-in token")
-            load("$base/auth/app?r=$remember&next=%2F", true)
+        if (!hasSession && remember != null) openNatively("$base/auth/app?r=$remember&next=%2F", "stay signed in (no session cookie)")
+    }
+
+    private fun navigate(url: String) {
+        val wv = getBridge()?.webView ?: return
+        wv.post { wv.loadUrl(url) }
+    }
+
+    /**
+     * Opens a page that signs in (/auth/app, /verify) natively: [CookieHop] takes the session cookie of the redirect into the
+     * WebView's cookie store, then the WebView loads the target. Waits for the bridge's first page, whose anonymous cookie
+     * would otherwise land after ours. One hop at a time; logged with path and status only.
+     */
+    private fun openNatively(url: String, why: String) {
+        val isRemember = url.contains("/auth/app?r=")
+        if (isRemember) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastRememberHopAt < 10_000) return   // the page asked as well – once is enough
+            lastRememberHopAt = now
+        }
+        whenFirstPageLoaded {
+            val base = getBridge()?.config?.serverUrl?.replace(Regex("/+$"), "") ?: return@whenFirstPageLoaded
+            val ua = getBridge()?.webView?.settings?.userAgentString
+            hops.execute {
+                val cm = CookieManager.getInstance()
+                val r = CookieHop({ cm.getCookie(it) }, { u, c -> cm.setCookie(u, c) }, ua).open(url)
+                cm.flush()
+                val target = r.location ?: "$base/"
+                Diag.login("$why: ${Uri.parse(url).path} → " + (if (r.code > 0) "HTTP ${r.code}" else "no connection (${r.error})") +
+                    ", ${r.cookies} cookie(s) → ${Uri.parse(target).path}")
+                runOnUiThread { if (!isDestroyed) getBridge()?.webView?.loadUrl(target) }
+            }
         }
     }
 
-    /** On a cold start the bridge has already started loading the start page: stop it, so its anonymous session cookie cannot overwrite the sign-in. */
-    private fun load(url: String, coldStart: Boolean) {
-        val wv = getBridge()?.webView ?: return
-        wv.post {
-            if (coldStart) wv.stopLoading()
-            wv.loadUrl(url)
+    private fun whenFirstPageLoaded(action: () -> Unit) {
+        if (firstPageLoaded) {
+            action()
+            return
+        }
+        pending += action
+        if (pending.size == 1) h.postDelayed({
+            if (!firstPageLoaded) {
+                Diag.log("start: first page not loaded after 8 s – signing in anyway")
+                runPending()
+            }
+        }, 8000)
+    }
+
+    private fun runPending() {
+        firstPageLoaded = true
+        val todo = ArrayList(pending)
+        pending.clear()
+        todo.forEach { it() }
+    }
+
+    /** Navigations of the page itself to a sign-in page (native_tracker.js: "stay signed in" → /auth/app?r=…) go natively too. */
+    private inner class SignInAwareClient(bridge: Bridge) : BridgeWebViewClient(bridge) {
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            val u = request.url
+            if (request.isForMainFrame && "https" == u.scheme && u.host?.let { it in OWN_HOSTS } == true && CookieHop.isSignInPath(u.path)) {
+                openNatively(u.toString(), "page → ${u.path}")
+                return true
+            }
+            return super.shouldOverrideUrlLoading(view, request)
         }
     }
 
     private val pageListener = object : WebViewListener() {
         override fun onPageLoaded(webView: WebView) {
+            if (!firstPageLoaded) runPending()
             // ask the page twice: assets/native_tracker.js and the bridge can come a little after "loaded"
             h.postDelayed({ probe(webView) }, 1500)
             h.postDelayed({ probe(webView) }, 6000)
