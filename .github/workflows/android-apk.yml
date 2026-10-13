@@ -17,7 +17,7 @@ on:
 
 jobs:
   apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04   # pinned: ubuntu-latest moves to 26.04 from 2026-10-19, the Android SDK layout may differ
     env:
       ELTOURO_URL: ${{ github.event.inputs.url || 'https://test.eltouro.de' }}
     steps:
@@ -68,6 +68,7 @@ jobs:
                       print(f"::error::{c.get('classname')}.{c.get('name')}: {(e.get('message') or '')[:200]}")
           print(f"::notice::Unit-Tests: {t} gelaufen, {f} fehlgeschlagen, {s} übersprungen")
           PY
+          echo "::notice::APK versionCode $((1000 + GITHUB_RUN_NUMBER)), Web-App $ELTOURO_URL"
 
       - name: Testbericht bei Fehlern
         if: failure()

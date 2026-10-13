@@ -60,3 +60,7 @@ unter `android/app/src/test/`. Marco testet auf einem **Xiaomi 15 Ultra (HyperOS
   zusätzlich nur mit „Immer zulassen“. `startForeground` immer in try/catch und protokollieren.
 - Kotlin 2.2: `kotlinOptions {}` ist ein Fehler, `kotlin { compilerOptions { jvmTarget… } }` nehmen (JVM 21 wie Capacitor).
 - `capacitor.build.gradle` und `capacitor.settings.gradle` erzeugt `npx cap sync` neu – nicht von Hand ändern.
+- `versionCode` = 1000 + Laufnummer der CI: die Laufnummern fingen im neuen Repo wieder bei 1 an, die alten APKs aus dem
+  Web-Repo hatten höhere – ohne Versatz lehnt Android das Update als Downgrade ab.
+- Das rohe Job-Log ist nicht aus jeder Umgebung erreichbar; Kotlin-Fehler/-Warnungen und die Testzahl stehen deshalb als
+  Annotations am Lauf (Check-Runs-API).

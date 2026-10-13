@@ -8,7 +8,8 @@ android {
         applicationId "de.eltouro.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode = Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '1')
+        // 1000 + run number: the APKs built in aMuseD1985/ElTouro had lower run numbers, so updates still install over them
+        versionCode = 1000 + Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '0')
         versionName "0.3.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
