@@ -1,0 +1,419 @@
+From 48c43f8eb4ae52b2f6fd7e1a2d9fd9103bde126c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 13 Oct 2026 18:39:14 +0000
+Subject: [PATCH] App device key for the Android app's background upload
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The Android app (now aMuseD1985/ElTouro-Android) uploads a running
+recording with its own device key, so it keeps working when Android killed
+the app and the WebView's cookies are gone.
+
+- app_devices: SHA-256 of the key only, app version, created/last seen/
+  revoked; FK ON DELETE CASCADE; at most five keys per rider
+- app_device_lib.php, POST /api/app/device: register (session + X-CSRF),
+  check and revoke (with the key)
+- track.php: accepts Authorization: Bearer eld_… or X-Device-Token instead
+  of session + CSRF – without tester cookie and session file, consent is
+  checked; the cookie path is unchanged
+- keys are revoked on logout and on password reset (which now also revokes
+  the app's remember tokens)
+- data export lists app_devices
+- privacy policy DE+EN: new section "Android-App" with marker and the
+  earlier default hashes; CONSENT_VERSION deliberately unchanged
+- docs/app-interface.md: the contract between app and web app (copy of the
+  file in the Android repo)
+---
+ .htaccess             |  1 +
+ account_data_lib.php  |  1 +
+ app_device.php        | 58 ++++++++++++++++++++++++++++++++++
+ app_device_lib.php    | 72 +++++++++++++++++++++++++++++++++++++++++++
+ docs/app-interface.md | 57 ++++++++++++++++++++++++++++++++++
+ legal_texts.php       |  4 +++
+ logout.php            |  2 ++
+ migrations.php        | 16 ++++++++--
+ password_reset.php    |  3 ++
+ track.php             | 34 +++++++++++++++-----
+ 10 files changed, 239 insertions(+), 9 deletions(-)
+ create mode 100644 app_device.php
+ create mode 100644 app_device_lib.php
+ create mode 100644 docs/app-interface.md
+
+diff --git a/.htaccess b/.htaccess
+index 8ea10e5..5585b14 100644
+--- a/.htaccess
++++ b/.htaccess
+@@ -59,6 +59,7 @@ RewriteRule ^auth/google/?$ auth_google.php [L,QSA]
+ RewriteRule ^auth/app-return/?$ app_return.php [L,QSA]
+ RewriteRule ^auth/app/?$ app_login.php [L,QSA]
+ RewriteRule ^api/app/remember/?$ app_remember.php [L,QSA]
++RewriteRule ^api/app/device/?$ app_device.php [L,QSA]
+ RewriteRule ^join/([a-z0-9]{10})/?$ join.php?code=$1 [L,QSA]
+ RewriteRule ^auth/google/callback/?$ auth_google.php?callback=1 [L,QSA]
+ 
+diff --git a/account_data_lib.php b/account_data_lib.php
+index 35c8c83..9c4629f 100644
+--- a/account_data_lib.php
++++ b/account_data_lib.php
+@@ -102,6 +102,7 @@ function exportAccountData(int $userId): array
+         'forum_posts' => $all('SELECT id, thread_id, body, created_at, edited_at, deleted_at FROM forum_posts WHERE user_id = ? ORDER BY id', [$userId]),
+         'notification_settings' => $all('SELECT push_social, push_rides_near, push_rides_soon, mail_rides_near, mail_evening, radius_km, home_lat, home_lng, (ical_token IS NOT NULL) AS calendar_feed_on FROM notify_prefs WHERE user_id = ?', [$userId]),
+         'push_devices' => $all('SELECT endpoint, created_at, last_ok_at FROM push_subscriptions WHERE user_id = ?', [$userId]),
++        'app_devices' => $all('SELECT prefix, platform, app_version, created_at, last_seen_at, revoked_at FROM app_devices WHERE user_id = ? ORDER BY id', [$userId]),
+         'crew_photos' => $all('SELECT id, group_id, caption, width, height, created_at FROM crew_photos WHERE user_id = ? AND deleted_at IS NULL', [$userId]),
+         'crew_photo_likes' => $all('SELECT photo_id, created_at FROM crew_photo_likes WHERE user_id = ?', [$userId]),
+         'ratings' => $all('SELECT target_type, target_id, stars, comment, created_at, updated_at FROM ratings WHERE user_id = ? AND deleted_at IS NULL', [$userId]),
+diff --git a/app_device.php b/app_device.php
+new file mode 100644
+index 0000000..509fb18
+--- /dev/null
++++ b/app_device.php
+@@ -0,0 +1,58 @@
++<?php
++/**
++ * POST /api/app/device (JSON) – the Android app's device key (app_device_lib.php).
++ *   {"action": "register", "version": "0.3.0 (57)"}   signed-in session + X-CSRF  -> {"token": "eld_…"}
++ *   {"action": "revoke"}                               with the device key          -> {"ok": true}
++ *   {"action": "check"}                                with the device key          -> {"ok": true}   (401 when unknown/revoked)
++ */
++declare(strict_types=1);
++require_once __DIR__ . '/app_device_lib.php';
++$withKey = appDeviceTokenFromRequest() !== '';
++if ($withKey) {
++    define('SKIP_ACCESS_GATE', true);   // the key is the credential, not the tester password (like api.php)
++    define('NO_SESSION', true);
++}
++require __DIR__ . '/bootstrap.php';
++header('Content-Type: application/json; charset=utf-8');
++header('Cache-Control: no-store');
++
++function deviceRespond(int $code, array $data): never
++{
++    http_response_code($code);
++    echo json_encode($data, JSON_UNESCAPED_SLASHES);
++    exit;
++}
++
++if (!isPost()) {
++    deviceRespond(405, ['error' => 'method']);
++}
++$input = json_decode((string)file_get_contents('php://input'), true);
++$action = is_array($input) ? (string)($input['action'] ?? '') : '';
++
++if ($withKey) {
++    $auth = appDeviceAuthenticate();
++    if ($action === 'revoke') {
++        appDeviceRevoke(appDeviceTokenFromRequest());
++        deviceRespond(200, ['ok' => true]);
++    }
++    if ($auth['user'] === null) {
++        deviceRespond($auth['error'] === 'consent' ? 403 : 401, ['error' => $auth['error']]);
++    }
++    if ($action === 'check') {
++        deviceRespond(200, ['ok' => true]);
++    }
++    deviceRespond(400, ['error' => 'action']);
++}
++
++$me = currentUser();
++if ($me === null) {
++    deviceRespond(401, ['error' => 'login']);
++}
++if (!checkCsrfHeader()) {
++    deviceRespond(400, ['error' => 'csrf']);
++}
++session_write_close();
++if ($action !== 'register') {
++    deviceRespond(400, ['error' => 'action']);
++}
++deviceRespond(200, ['token' => appDeviceCreate((int)$me['id'], (string)($input['version'] ?? ''))]);
+diff --git a/app_device_lib.php b/app_device_lib.php
+new file mode 100644
+index 0000000..5e53b03
+--- /dev/null
++++ b/app_device_lib.php
+@@ -0,0 +1,72 @@
++<?php
++/**
++ * Android app: one key per installed app ("device key", eld_ + 40 hex), stored only as SHA-256.
++ * The app's background parts (recording upload, later push and widgets) authenticate with it when the WebView's
++ * session is gone – e.g. after Android killed the app during a ride with the display off.
++ * Sent as "Authorization: Bearer eld_…" and, because some CGI setups drop that header, also as "X-Device-Token".
++ * A key is created from a signed-in WebView (POST /api/app/device, session + X-CSRF) and revoked on logout,
++ * on a password reset and with the account (FK ON DELETE CASCADE).
++ */
++declare(strict_types=1);
++
++const APP_DEVICES_PER_USER = 5;          // older keys of the same rider are deleted
++const APP_DEVICE_SEEN_EVERY = 300;       // last_seen_at is written at most every 5 minutes
++
++/** The device key of this request, or '' – usable before bootstrap.php (decides SKIP_ACCESS_GATE). */
++function appDeviceTokenFromRequest(): string
++{
++    foreach (['HTTP_AUTHORIZATION', 'REDIRECT_HTTP_AUTHORIZATION', 'HTTP_X_DEVICE_TOKEN'] as $k) {
++        $v = trim((string)($_SERVER[$k] ?? ''));
++        if (preg_match('/^(?:Bearer\s+)?(eld_[0-9a-f]{40})$/i', $v, $m)) {
++            return strtolower($m[1]);
++        }
++    }
++    return '';
++}
++
++function appDeviceCreate(int $userId, string $appVersion): string
++{
++    $plain = 'eld_' . bin2hex(random_bytes(20));
++    dbExec('INSERT INTO app_devices (user_id, token_hash, prefix, app_version, last_seen_at) VALUES (?, ?, ?, ?, UTC_TIMESTAMP())',
++        [$userId, hash('sha256', $plain), substr($plain, 0, 8), mb_substr(trim($appVersion), 0, 40) ?: null]);
++    dbExec('DELETE FROM app_devices WHERE user_id = ? AND id NOT IN (
++              SELECT id FROM (SELECT id FROM app_devices WHERE user_id = ? AND revoked_at IS NULL ORDER BY id DESC LIMIT ' . APP_DEVICES_PER_USER . ') t)',
++        [$userId, $userId]);
++    return $plain;
++}
++
++/**
++ * The rider behind the device key of this request → ['user' => row, 'error' => null], or ['user' => null, 'error' => 'device'|'consent'].
++ * Same checks as a signed-in session: active, confirmed, current consent.
++ */
++function appDeviceAuthenticate(): array
++{
++    $plain = appDeviceTokenFromRequest();
++    if ($plain === '') {
++        return ['user' => null, 'error' => 'device'];
++    }
++    $dev = dbOne('SELECT id, user_id, last_seen_at FROM app_devices WHERE token_hash = ? AND revoked_at IS NULL', [hash('sha256', $plain)]);
++    $user = $dev ? dbOne("SELECT id, email, display_name, locale, is_admin, consent_version FROM users
++                          WHERE id = ? AND status = 'active' AND email_verified_at IS NOT NULL", [$dev['user_id']]) : null;
++    if ($dev === null || $user === null) {
++        return ['user' => null, 'error' => 'device'];
++    }
++    if ((int)$user['consent_version'] < CONSENT_VERSION) {
++        return ['user' => null, 'error' => 'consent'];
++    }
++    $seen = $dev['last_seen_at'] !== null ? (int)strtotime($dev['last_seen_at'] . ' UTC') : 0;
++    if (time() - $seen > APP_DEVICE_SEEN_EVERY) {
++        dbExec('UPDATE app_devices SET last_seen_at = UTC_TIMESTAMP() WHERE id = ?', [$dev['id']]);
++    }
++    return ['user' => $user, 'error' => null];
++}
++
++function appDeviceRevoke(string $plain): void
++{
++    dbExec('UPDATE app_devices SET revoked_at = UTC_TIMESTAMP() WHERE token_hash = ? AND revoked_at IS NULL', [hash('sha256', $plain)]);
++}
++
++function revokeAppDevices(int $userId): void
++{
++    dbExec('UPDATE app_devices SET revoked_at = UTC_TIMESTAMP() WHERE user_id = ? AND revoked_at IS NULL', [$userId]);
++}
+diff --git a/docs/app-interface.md b/docs/app-interface.md
+new file mode 100644
+index 0000000..dd4dac0
+--- /dev/null
++++ b/docs/app-interface.md
+@@ -0,0 +1,57 @@
++# Schnittstelle App ↔ Web-App
++
++Gilt für beide Repos: `aMuseD1985/ElTouro-Android` (diese App) und `aMuseD1985/ElTouro` (Web-App, Server). Eine Kopie liegt
++im Web-Repo; wer hier etwas ändert, ändert beide. **Grundregel: nur ergänzen, nie umbenennen oder entfernen.** Die APK lädt
++die Web-App vom Server – alte APKs treffen auf neue Seiten und neue APKs auf alte Seiten. Neues wird per Feature-Erkennung
++benutzt (Methode vorhanden? `status().version`?), nie vorausgesetzt.
++
++## 1. Brücke Seite → App (Capacitor-Plugin `EltouroTracker`)
++
++JS-Seite: `assets/native_tracker.js` im Web-Repo (`window.ElTouroNative`). Native Seite: `TrackerPlugin.kt` hier.
++
++| Methode | Argumente | Seit | Zweck |
++|---|---|---|---|
++| `start` | `{baseUrl, csrf, session?, title, text}` | 0.1 | Berechtigungen, Fahrt-Dienst starten; `session` > 0 = Aufzeichnung |
++| `setSession` | `{session, csrf}` | 0.1 | Aufzeichnung ein (Session des Servers) |
++| `clearSession` | – | 0.1 | Aufzeichnung aus, Rest hochladen |
++| `stop` | – | 0.1 | Rest hochladen, Dienst beenden, Fahrt nicht mehr aktiv |
++| `batterySettings` | – | 0.1 | Akku-Optimierung (seit 0.2 direkter Systemdialog) |
++| `openExternal` | `{url}` (nur `https://`) | 0.1 | Custom Tab, z. B. Google-Anmeldung |
++| `getRemember` / `setRemember` / `clearRemember` | `{token}` (64 hex) | 0.1 | „Angemeldet bleiben“; `clearRemember` widerruft seit 0.3 auch den Geräteschlüssel |
++| `log` | `{msg}` | 0.2 | Zeile ins Diagnose-Log (max. 60/min, 300 Zeichen) |
++| `status` | – → `{preciseLocation, backgroundLocation, notifications, batteryUnrestricted, complete, serviceRunning, version}` | 0.2 | was für Fahrten mit Display aus fehlt (`version` = 2) |
++| `diagnostics` | – | 0.2 | Bildschirm „Diagnose“ öffnen |
++
++Ereignis `location`: `{lat, lng, acc, heading?, speedMs?, t}` (jede Position, solange die Seite lebt).
++
++## 2. Endpunkte, die die App direkt ruft
++
++| Endpunkt | Auth | Inhalt |
++|---|---|---|
++| `POST /api/track` | Geräteschlüssel (`Authorization: Bearer eld_…` **und** `X-Device-Token`) oder Session-Cookie + `X-CSRF` | `{"action":"points","session_id":n,"points":[[unixMs,lat,lng,acc,kmh\|null],…]}` → `{"stored":n}`; höchstens 600 Punkte (`TRACK_MAX_BATCH`) |
++| `POST /api/app/device` | Session + `X-CSRF` | `{"action":"register","version":"…"}` → `{"token":"eld_…"}` |
++| `POST /api/app/device` | Geräteschlüssel | `{"action":"check"}` → `{"ok":true}`; `{"action":"revoke"}` |
++| `POST /api/app/remember` | Session + `X-CSRF` | → `{"token": 64 hex}` (holt die Seite, speichert die App) |
++| `GET /auth/app?t=…&next=…` / `?r=…` | Einmal-Token / Remember-Token | meldet die WebView an |
++| `GET /auth/app-return` | – | Ende der Google-Anmeldung im Browser → `de.eltouro.app://login?t=…&next=…` |
++
++Antworten, auf die sich die App verlässt (`Uploader`): 2xx = angekommen; `404`/`409` = Session unbekannt/nicht mehr offen →
++Punkte verwerfen; `401` = Schlüssel/Sitzung weg (mit Schlüssel: Rückfall auf Cookie, neuer Schlüssel); `400` CSRF, `403`
++Einwilligung (`{"error":"consent"}`), `302` Zugangsschutz, 5xx → behalten, später erneut. **Weiterleitungen sind für die App
++Fehler** – eine API-Antwort darf nie eine Seite sein. `{"stored":0}` bei Punkten = Aufzeichnung serverseitig schon beendet
++(nach 2 h ohne Position, `finishStaleRecordings()`).
++
++Anfragen mit Geräteschlüssel laufen ohne Tester-Cookie und ohne Session (`SKIP_ACCESS_GATE`, `NO_SESSION`), die Einwilligung
++prüft `appDeviceAuthenticate()`.
++
++## 3. Links und Hosts
++
++App Links / Intent-Filter: `https://app.eltouro.de`, `test.eltouro.de`, `beta.eltouro.de` (andere Hosts öffnet die App nicht).
++Eigenes Schema: `de.eltouro.app://login?t=<64 hex>&next=<Pfad>`. Google-Knopf in der App: die Seite hängt `?app=1` an und öffnet
++ihn über `openExternal`.
++
++## 4. Datenschutz
++
++Jede Änderung, was die App speichert oder überträgt, braucht die Datenschutzerklärung im Web-Repo (`legal_texts.php`, Abschnitt
++„Android-App“, DE+EN, Marker in `legalMarkers()`, Hash des alten Standardtexts in `$earlierDefaults`, ggf. `CONSENT_VERSION`,
++Export/Löschung in `account_data_lib.php`).
+diff --git a/legal_texts.php b/legal_texts.php
+index a728108..f9fc2cc 100644
+--- a/legal_texts.php
++++ b/legal_texts.php
+@@ -143,6 +143,8 @@ Eine Tour besteht aus den Wegpunkten, die du auf der Karte setzt, und der daraus
+ 
+ **Fahrmodus:** Im Fahrmodus nutzt die Navigation deinen Standort, um dir Abbiegehinweise anzusagen. Das passiert nur in deinem Browser; ohne Aufzeichnung wird dein Standort nicht an uns übertragen. Schaltest du „Fahrt aufzeichnen“ ein, schickt die App während der Fahrt etwa alle zwei Sekunden deine Position samt Genauigkeit und Geschwindigkeit an unseren Server. Wir speichern die Aufzeichnung, berechnen daraus Strecke, Fahrzeit und Höchstgeschwindigkeit und vermerken die gefahrenen Kilometer für Punkte und Ränge. Die Aufzeichnung sieht nur du; du kannst sie auf der Tourseite jederzeit löschen, dann sind alle Positionen endgültig entfernt. Rechtsgrundlage ist der Nutzungsvertrag (Art. 6 Abs. 1 lit. b DSGVO); die Aufzeichnung ist freiwillig.
+ 
++**Android-App:** Nutzt du ElTouro als Android-App, meldet sich die App einmal mit deinem Konto bei uns an und bekommt dafür einen eigenen Geräteschlüssel. Wir speichern davon nur einen Hashwert, die App-Version und wann der Schlüssel angelegt und zuletzt benutzt wurde. Mit dem Schlüssel schickt die App eine laufende Aufzeichnung auch dann an uns, wenn sie im Hintergrund oder bei ausgeschaltetem Display läuft. Bis die Positionen bei uns angekommen sind (etwa bei Funkloch), hält die App sie auf deinem Gerät vor und löscht sie danach. Die Berechtigung „Standort immer zulassen“ nutzt die App nur, um eine laufende Fahrt fortzusetzen, wenn Android sie unterbrochen hat. Für die Fehlersuche führt die App ein Diagnose-Protokoll nur auf deinem Gerät (Zustand des Fahrt-Dienstes, Berechtigungen, Akku-Einstellungen – keine Positionen); es verlässt dein Gerät nur, wenn du es selbst teilst. Meldest du dich ab oder setzt dein Passwort neu, wird der Schlüssel ungültig; mit deinem Konto wird er gelöscht. Rechtsgrundlage ist der Nutzungsvertrag (Art. 6 Abs. 1 lit. b DSGVO).
++
+ **Sprüche und Landschaft:** Damit Touro im Fahrmodus etwas zur Landschaft sagen kann („Felder, so weit das Auge reicht“), fragt unser Server beim Overpass-Dienst (siehe „Pausen-Vorschläge“) nach Acker-, Wald- und Wasserflächen und Parks entlang deiner Strecke und rechnet Anstiege und lange Geraden aus der Strecke selbst. Übermittelt werden nur Kartenausschnitte, nicht deine IP-Adresse und nicht dein Konto; das Ergebnis speichern wir pro Tour. Welche Sprüche du schon gehört hast, merkt sich die App nur auf deinem Gerät (damit sich nichts zu schnell wiederholt). Du kannst die Sprüche im Fahrmodus abschalten. Rechtsgrundlage ist der Nutzungsvertrag (Art. 6 Abs. 1 lit. b DSGVO).
+ 
+ **Sprachansagen:** Touros Ansagen und Geschichten sind vorab aufgenommene Sprachclips. Sie sind mit einer künstlichen Stimme erzeugt (KI-Sprachsynthese eines externen Anbieters, aus festen Texten; Nutzerdaten gelangen dorthin nicht) und liegen auf unseren Servern. Wo für einen Satz kein Clip existiert, nutzt dein Gerät seine eigene Sprachausgabe; das geschieht auf dem Gerät.
+@@ -279,6 +281,8 @@ A route consists of the waypoints you set on the map and the calculated track. W
+ 
+ **Ride mode:** In ride mode the navigation uses your location to announce turns. This happens only in your browser; without recording your location is not sent to us. If you switch on “Record ride”, the app sends your position with accuracy and speed to our server about every two seconds while you ride. We store the recording, calculate distance, riding time and top speed, and note the kilometres for points and ranks. Only you can see the recording; you can delete it on the route page at any time, which removes all positions for good. Legal basis: the user agreement (Art. 6(1)(b) GDPR); recording is voluntary.
+ 
++**Android app:** If you use ElTouro as an Android app, the app signs in with your account once and gets a device key of its own. We store only a hash of it, the app version and when the key was created and last used. With the key the app sends a running recording to us even while it runs in the background or with the display off. Until the positions have reached us (for example in a dead zone), the app keeps them on your device and deletes them afterwards. The app uses the permission “Allow location all the time” only to continue a running ride after Android interrupted it. For troubleshooting the app keeps a diagnostics log on your device only (state of the ride service, permissions, battery settings – no positions); it leaves your device only if you share it yourself. When you log out or reset your password, the key becomes invalid; it is deleted with your account. Legal basis: the user agreement (Art. 6(1)(b) GDPR).
++
+ **Banter and scenery:** So that Touro can comment on the scenery in ride mode (“fields as far as the eye can see”), our server asks the Overpass service (see “Stop suggestions”) for farmland, forest, water and parks along your route and works out climbs and long straights from the route itself. Only map sections are transmitted, not your IP address and not your account; we store the result per route. Which remarks you have already heard is remembered only on your device (so nothing repeats too soon). You can switch the remarks off in ride mode. Legal basis: the user agreement (Art. 6(1)(b) GDPR).
+ 
+ **Voice announcements:** Touro's announcements and stories are pre-recorded voice clips. They are produced with an artificial voice (AI speech synthesis by an external provider, from fixed texts; no user data reaches it) and stored on our servers. Where no clip exists for a sentence, your device uses its own speech output; that happens on the device.
+diff --git a/logout.php b/logout.php
+index f7a7e82..75fe1ca 100644
+--- a/logout.php
++++ b/logout.php
+@@ -8,6 +8,8 @@ if (isPost()) {
+     if (!empty($_SESSION['uid'])) {
+         require_once __DIR__ . '/account_lib.php';
+         revokeAppRemember((int)$_SESSION['uid']);
++        require_once __DIR__ . '/app_device_lib.php';
++        revokeAppDevices((int)$_SESSION['uid']);
+     }
+     $_SESSION = [];
+     session_regenerate_id(true);
+diff --git a/migrations.php b/migrations.php
+index 2d78929..03d388f 100644
+--- a/migrations.php
++++ b/migrations.php
+@@ -710,6 +710,8 @@ function runMigrations(): array
+     $earlierDefaults['privacy']['en'][] = '6e1fe69c32683605608f174c913556e6cdbcc5c9e563201e39b8acb450030201';   // text before the crew chat wording (2026-10-13)
+     $earlierDefaults['terms']['de'][] = 'd3b22cd2272e66951911386814b92fcbb4dfef2daed3cf0363c08d6ecba79cf3';   // text before the crew chat wording (2026-10-13)
+     $earlierDefaults['terms']['en'][] = '4ee306ba64d3762b39c2def65dc27f2dc322331ec1914c890edc32ff43db2cf0';   // text before the crew chat wording (2026-10-13)
++    $earlierDefaults['privacy']['de'][] = '33a3066fbcd9a584988bc9984a494f525120310a52111cbba11ffcff7653e698';   // text before the Android app wording (2026-10-13)
++    $earlierDefaults['privacy']['en'][] = 'a2bdbc24c00dc57f9dded4fbff7190667b4757313e8c45bfcb6ac8400d38b193';   // text before the Android app wording (2026-10-13)
+     foreach ($earlierDefaults as $slug => $byLang) {
+         foreach ($byLang as $loc => $hashes) {
+             $p = dbOne('SELECT body FROM pages WHERE slug = ? AND locale = ?', [$slug, $loc]);
+@@ -762,6 +764,16 @@ function runMigrations(): array
+       CONSTRAINT fk_chatr_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+     ) $opt");
+ 
++    /* ---------- Android app: one device key per installed app (app_device_lib.php) ---------- */
++    $create('app_devices', "CREATE TABLE app_devices (
++      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, user_id BIGINT UNSIGNED NOT NULL,
++      token_hash CHAR(64) NOT NULL, prefix CHAR(8) NOT NULL, platform VARCHAR(16) NOT NULL DEFAULT 'android',
++      app_version VARCHAR(40) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
++      last_seen_at DATETIME NULL, revoked_at DATETIME NULL,
++      UNIQUE KEY uq_appdev_token (token_hash), KEY ix_appdev_user (user_id, revoked_at),
++      CONSTRAINT fk_appdev_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
++    ) $opt");
++
+     // Android app: hand-over of the Google sign-in from the system browser to the app (app_login.php)
+     $purposeType = columnType('auth_tokens', 'purpose');
+     if ($purposeType !== '' && !str_contains($purposeType, "'app_remember'")) {
+@@ -806,8 +818,8 @@ function legalMarkers(): array
+ {
+     $markers = [
+         'privacy' => [
+-            'de' => ['Ausfahrten' => 'Fotos und Videos:', 'Teilen' => 'Touren teilen:', 'Google-Anmeldung' => 'Anmeldung mit Google:', 'Einladungen' => 'Einladungen:', 'Namensvorschlag' => 'Namensvorschlag:', 'Ortssuche' => 'Ortssuche:', 'Wegpunkt-Namen' => 'Namen der Wegpunkte:', 'Fahrmodus' => 'Fahrmodus:', 'Pausen' => 'Pausen-Vorschläge:', 'Live' => 'Live-Standort:', 'Profilfoto' => 'Profilfoto und Reaktionen:', 'Kartenstil' => 'Kartenstil und Zwischenspeicher:', 'Einwilligung' => 'Einwilligung zu Beginn der Nutzung:', 'Benachrichtigungen' => 'Benachrichtigungen:', 'Google Maps' => 'Link zu Google Maps:', 'Bewertungen und Orte' => 'Bewertungen und Orte:', 'Push' => 'Push-Nachrichten und Gebiet:', 'Fotowand' => 'Fotowand:', 'Routen-Zwischenspeicher' => 'Berechnete Routen speichern wir', 'Live-Server' => 'Live-Server:', 'Sprüche und Landschaft' => 'Sprüche und Landschaft:', 'Sprachansagen' => 'Sprachansagen:', 'Handyhalter' => 'Handyhalter-Empfehlung:', 'Hilfe und Feedback' => 'Hilfe und Feedback:', 'Abendrunde und Kalender' => 'Abendrunde und Kalender-Feed:', 'Herdenbild' => 'Herdenbild:', 'Chat' => 'Schnell-Chat:'],
+-            'en' => ['Ausfahrten' => 'Photos and videos:', 'Teilen' => 'Sharing routes:', 'Google-Anmeldung' => 'Sign in with Google:', 'Einladungen' => 'Invitations:', 'Namensvorschlag' => 'Name suggestions:', 'Ortssuche' => 'Place search:', 'Wegpunkt-Namen' => 'Waypoint names:', 'Fahrmodus' => 'Ride mode:', 'Pausen' => 'Stop suggestions:', 'Live' => 'Live location:', 'Profilfoto' => 'Profile photo and reactions:', 'Kartenstil' => 'Map style and cache:', 'Einwilligung' => 'Consent at the start of use:', 'Benachrichtigungen' => 'Notifications:', 'Google Maps' => 'Link to Google Maps:', 'Bewertungen und Orte' => 'Ratings and places:', 'Push' => 'Push messages and area:', 'Fotowand' => 'Photo wall:', 'Routen-Zwischenspeicher' => 'Calculated routes are cached', 'Live-Server' => 'Live server:', 'Sprüche und Landschaft' => 'Banter and scenery:', 'Sprachansagen' => 'Voice announcements:', 'Handyhalter' => 'Phone holder recommendation:', 'Hilfe und Feedback' => 'Help and feedback:', 'Abendrunde und Kalender' => 'Evening round and calendar feed:', 'Herdenbild' => 'Crew cover image:', 'Chat' => 'Quick chat:'],
++            'de' => ['Ausfahrten' => 'Fotos und Videos:', 'Teilen' => 'Touren teilen:', 'Google-Anmeldung' => 'Anmeldung mit Google:', 'Einladungen' => 'Einladungen:', 'Namensvorschlag' => 'Namensvorschlag:', 'Ortssuche' => 'Ortssuche:', 'Wegpunkt-Namen' => 'Namen der Wegpunkte:', 'Fahrmodus' => 'Fahrmodus:', 'Pausen' => 'Pausen-Vorschläge:', 'Live' => 'Live-Standort:', 'Profilfoto' => 'Profilfoto und Reaktionen:', 'Kartenstil' => 'Kartenstil und Zwischenspeicher:', 'Einwilligung' => 'Einwilligung zu Beginn der Nutzung:', 'Benachrichtigungen' => 'Benachrichtigungen:', 'Google Maps' => 'Link zu Google Maps:', 'Bewertungen und Orte' => 'Bewertungen und Orte:', 'Push' => 'Push-Nachrichten und Gebiet:', 'Fotowand' => 'Fotowand:', 'Routen-Zwischenspeicher' => 'Berechnete Routen speichern wir', 'Live-Server' => 'Live-Server:', 'Sprüche und Landschaft' => 'Sprüche und Landschaft:', 'Sprachansagen' => 'Sprachansagen:', 'Handyhalter' => 'Handyhalter-Empfehlung:', 'Hilfe und Feedback' => 'Hilfe und Feedback:', 'Abendrunde und Kalender' => 'Abendrunde und Kalender-Feed:', 'Herdenbild' => 'Herdenbild:', 'Chat' => 'Schnell-Chat:', 'Android-App' => 'Android-App:'],
++            'en' => ['Ausfahrten' => 'Photos and videos:', 'Teilen' => 'Sharing routes:', 'Google-Anmeldung' => 'Sign in with Google:', 'Einladungen' => 'Invitations:', 'Namensvorschlag' => 'Name suggestions:', 'Ortssuche' => 'Place search:', 'Wegpunkt-Namen' => 'Waypoint names:', 'Fahrmodus' => 'Ride mode:', 'Pausen' => 'Stop suggestions:', 'Live' => 'Live location:', 'Profilfoto' => 'Profile photo and reactions:', 'Kartenstil' => 'Map style and cache:', 'Einwilligung' => 'Consent at the start of use:', 'Benachrichtigungen' => 'Notifications:', 'Google Maps' => 'Link to Google Maps:', 'Bewertungen und Orte' => 'Ratings and places:', 'Push' => 'Push messages and area:', 'Fotowand' => 'Photo wall:', 'Routen-Zwischenspeicher' => 'Calculated routes are cached', 'Live-Server' => 'Live server:', 'Sprüche und Landschaft' => 'Banter and scenery:', 'Sprachansagen' => 'Voice announcements:', 'Handyhalter' => 'Phone holder recommendation:', 'Hilfe und Feedback' => 'Help and feedback:', 'Abendrunde und Kalender' => 'Evening round and calendar feed:', 'Herdenbild' => 'Crew cover image:', 'Chat' => 'Quick chat:', 'Android-App' => 'Android app:'],
+         ],
+         'terms' => [
+             'de' => ['Ausfahrten' => 'legt eine Teilnehmergrenze fest', 'Teilen' => 'per Link teilst', 'Bull-Run' => 'Bull-Run', 'Profilfoto' => 'Als Profilfoto nimm nur', 'Selbst löschen' => 'Profil → „Meine Daten“', 'Querfeldein' => 'Querfeldein (Trekking-Routen)'],
+diff --git a/password_reset.php b/password_reset.php
+index 15e48b4..5a3bdc2 100644
+--- a/password_reset.php
++++ b/password_reset.php
+@@ -22,6 +22,9 @@ if (isPost()) {
+             redirect('/password/forgot');
+         }
+         dbExec('UPDATE users SET password_hash = ? WHERE id = ?', [password_hash($pw, PASSWORD_DEFAULT), $uid]);
++        require_once __DIR__ . '/app_device_lib.php';
++        revokeAppRemember($uid);   // a new password signs every app out
++        revokeAppDevices($uid);
+         logIn($uid);
+         flash(t('password.new_ok'));
+         redirect('/');
+diff --git a/track.php b/track.php
+index bad39a6..7981230 100644
+--- a/track.php
++++ b/track.php
+@@ -5,8 +5,17 @@
+  *   {"action": "points", "session_id": 12, "points": [[unixMillis, lat, lng, accuracy, speedKmh], …]} -> {"stored": 30}
+  *   {"action": "resume", "session_id": 12}                      -> {"session_id": 12, "points": [[lat, lng], …], "distance_m": 1200}   (continue after the page was closed; a recording silent for 2 hours has ended by itself → 409)
+  *   {"action": "finish", "session_id": 12}                  -> {"distance_m": 23400, "moving_s": 4120, "max_speed_kmh": 19.8}
++ * Or, from the Android app's background service, with its device key instead of session and CSRF (see below).
+  */
+ declare(strict_types=1);
++// The Android app uploads in the background with its device key (Authorization: Bearer eld_…) instead of the WebView's
++// session – that keeps working when Android has killed the app and the cookies are gone (app_device_lib.php).
++require_once __DIR__ . '/app_device_lib.php';
++$withDeviceKey = appDeviceTokenFromRequest() !== '';
++if ($withDeviceKey) {
++    define('SKIP_ACCESS_GATE', true);   // the key is the credential; consent is checked by appDeviceAuthenticate()
++    define('NO_SESSION', true);
++}
+ require __DIR__ . '/bootstrap.php';
+ require_once __DIR__ . '/track_lib.php';
+ require_once __DIR__ . '/drive_lib.php';
+@@ -19,14 +28,25 @@ function respond(int $code, array $data): never
+     exit;
+ }
+ 
+-$me = currentUser();
+-if ($me === null) {
+-    respond(401, ['error' => 'login']);
+-}
+-if (!isPost() || !checkCsrfHeader()) {
+-    respond(400, ['error' => 'csrf']);
++if ($withDeviceKey) {
++    $auth = appDeviceAuthenticate();
++    if ($auth['user'] === null) {
++        respond($auth['error'] === 'consent' ? 403 : 401, ['error' => $auth['error']]);
++    }
++    $me = $auth['user'];
++    if (!isPost()) {
++        respond(400, ['error' => 'method']);
++    }
++} else {
++    $me = currentUser();
++    if ($me === null) {
++        respond(401, ['error' => 'login']);
++    }
++    if (!isPost() || !checkCsrfHeader()) {
++        respond(400, ['error' => 'csrf']);
++    }
++    session_write_close();
+ }
+-session_write_close();
+ $uid = (int)$me['id'];
+ $input = json_decode((string)file_get_contents('php://input'), true);
+ $action = (string)($input['action'] ?? '');
+-- 
+2.43.0
+

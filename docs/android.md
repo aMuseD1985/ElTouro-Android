@@ -93,7 +93,8 @@ cd android && ./gradlew testDebugUnitTest assembleDebug   # braucht JDK 21 + And
 ```
 
 Die CI (`.github/workflows/android-apk.yml`) läuft bei jedem Push und Pull Request: erst die JVM-Unit-Tests (`android/app/src/test/`),
-dann die APK.
+dann die APK. Kotlin-Fehler/-Warnungen, die Testzahl und der `versionCode` stehen als Annotations am Lauf.
+Ohne SDK vorab prüfen: `tools/local-check/check.sh` (siehe dort).
 
 ## Noch offen
 

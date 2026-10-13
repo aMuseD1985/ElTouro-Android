@@ -6,8 +6,17 @@ Ansprechpartner und Product Owner: Marco. Kommunikation auf Deutsch, direkt und 
 ## Worum es geht
 
 Die Android-App von ElTouro (Community für E-Scooter-Fahrer). Hybrid: Inhalte bleiben die Web-App im WebView (Capacitor 8),
-alles, was Hintergrund, Sensoren oder System braucht, ist nativ in Kotlin. Ziel und Reihenfolge: `docs/android-native-prompt.md`.
-Aufbau, Diagnose, Testlisten: `docs/android.md`. Schnittstelle zur Web-App: `docs/app-interface.md`.
+alles, was Hintergrund, Sensoren oder System braucht, ist nativ in Kotlin.
+
+| Dokument | Inhalt |
+|---|---|
+| `docs/android-native-prompt.md` | Arbeitspaket (Ziel, Meilensteine M1–M7, Abnahme) |
+| `docs/plan.md` | **mit Marco abgestimmter Plan**: Befund, Architektur-Entscheidungen und Abweichungen, Vorgehen je Meilenstein, offene Entscheidungen |
+| `docs/android.md` | Aufbau der App, Diagnose, Upload-Regeln, Testlisten pro Meilenstein |
+| `docs/app-interface.md` | Vertrag mit der Web-App (Brücke, Endpunkte, Antworten, Hosts) – liegt in beiden Repos |
+| `docs/web-context.md` | was die App über die Web-App wissen muss (Fahrmodus-Regeln, Stimme, Live, Push, Fotos, Login, Recht, Marke) |
+| `docs/handoff/` | Patches und Notizen für das Web-Repo (`web-repo.md` zuerst lesen) |
+| `tools/local-check/` | Typprüfung und JVM-Tests ohne Android SDK – vor jedem Push |
 
 ## Zwei Repos
 
@@ -32,6 +41,7 @@ Aufbau, Diagnose, Testlisten: `docs/android.md`. Schnittstelle zur Web-App: `doc
 
 ## Bauen und testen
 
+Vor jedem Push `tools/local-check/check.sh` (Typprüfung aller Kotlin-Quellen gegen `android.jar` + Attrappen, JVM-Tests).
 Kein Android Studio, kein Gerät: gebaut wird in der CI (`android-apk.yml`: `testDebugUnitTest assembleDebug`, Artefakt
 `eltouro-apk`). Logik, die sich testen lässt, liegt Android-frei in `diag/`, `ride/` (später `nav/`, `voice/`) und hat JVM-Tests
 unter `android/app/src/test/`. Marco testet auf einem **Xiaomi 15 Ultra (HyperOS)** und schickt das Log aus „Diagnose → Log teilen“.
@@ -40,13 +50,20 @@ unter `android/app/src/test/`. Marco testet auf einem **Xiaomi 15 Ultra (HyperOS
 
 | Meilenstein | Stand |
 |---|---|
-| M1 Diagnose + Härtung | gebaut (Commit „Android M1“), CI und Gerätetest offen |
-| M2 Aufzeichnung nativ (SQLite-Puffer, Geräteschlüssel, Watchdog) | App-Teil gebaut; Server-Teil liegt als Patch beim Web-Repo (Tabelle `app_devices`, `/api/app/device`, `track.php`, Datenschutz „Android-App“; `CONSENT_VERSION` bewusst nicht erhöht – einmal mit FCM) |
+| M1 Diagnose + Härtung | gebaut, CI grün (erster Lauf 13.10., 21 Unit-Tests, keine Warnungen), APK `versionCode` 1003; **Gerätetest auf dem Xiaomi offen** – Marco schickt das Log |
+| M2 Aufzeichnung nativ (SQLite-Puffer, Geräteschlüssel, Watchdog) | App-Teil gebaut und in derselben APK; läuft bis zum Server-Teil mit Cookie + CSRF. Server-Teil: `docs/handoff/` (Tabelle `app_devices`, `/api/app/device`, `track.php`, Datenschutz „Android-App“; lokal gegen MariaDB getestet; `CONSENT_VERSION` bewusst nicht erhöht) – **wartet auf Einspielen im Web-Repo** |
 | M3 Fahrmodus nativ (Navigation + Sprache) | offen – Port von `navigate.js` mit Golden-Tests |
 | M4 Kamera/Dateien, Teilen, Deep-Links | offen |
 | M5 FCM-Push | offen – Marco legt das Firebase-Projekt an |
 | M6 Widgets + Hintergrund-Prüfung | offen |
 | M7 Live per WebSocket | offen |
+
+## Zugriff
+
+Diese Instanz braucht: dieses Repo Contents/Actions/Workflows lesen+schreiben, das Web-Repo lesen (für `navigate.js`, `voice.js`,
+`voice_lib.php`, Endpunkte). Ins Web-Repo schreibt sie nicht – dafür gibt es `docs/handoff/`. Tokens gehören nie ins Repo.
+CI-Läufe und Annotations: `GET /repos/aMuseD1985/ElTouro-Android/actions/runs`, dann `/commits/<sha>/check-runs` →
+`/check-runs/<id>/annotations`. Das rohe Log ist von außen oft nicht erreichbar.
 
 ## Stolperfallen, die schon einmal passiert sind
 
