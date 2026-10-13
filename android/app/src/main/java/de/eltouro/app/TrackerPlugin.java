@@ -132,6 +132,31 @@ public class TrackerPlugin extends Plugin {
         }
     }
 
+    // "Stay signed in" token (see app_login.php?r=): kept in the app's private storage, in case the WebView loses its cookies
+    private android.content.SharedPreferences prefs() {
+        return getContext().getSharedPreferences("eltouro", android.content.Context.MODE_PRIVATE);
+    }
+
+    @PluginMethod
+    public void getRemember(PluginCall call) {
+        JSObject o = new JSObject();
+        o.put("token", prefs().getString("remember", ""));
+        call.resolve(o);
+    }
+
+    @PluginMethod
+    public void setRemember(PluginCall call) {
+        String t = call.getString("token", "");
+        if (t != null && t.matches("[0-9a-f]{64}")) prefs().edit().putString("remember", t).apply();
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void clearRemember(PluginCall call) {
+        prefs().edit().remove("remember").apply();
+        call.resolve();
+    }
+
     @PluginMethod
     public void batterySettings(PluginCall call) {
         try {
