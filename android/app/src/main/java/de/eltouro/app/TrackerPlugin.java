@@ -114,6 +114,24 @@ public class TrackerPlugin extends Plugin {
         }).start();
     }
 
+    /** Opens a page in the system browser (Chrome Custom Tab) – used for "Sign in with Google", which Google forbids in a WebView. */
+    @PluginMethod
+    public void openExternal(PluginCall call) {
+        String url = call.getString("url", "");
+        if (!url.startsWith("https://")) {
+            call.reject("bad_url");
+            return;
+        }
+        try {
+            androidx.browser.customtabs.CustomTabsIntent tab = new androidx.browser.customtabs.CustomTabsIntent.Builder().build();
+            tab.intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            tab.launchUrl(getContext(), Uri.parse(url));
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("no_browser", e);
+        }
+    }
+
     @PluginMethod
     public void batterySettings(PluginCall call) {
         try {

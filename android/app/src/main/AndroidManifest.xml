@@ -22,6 +22,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Hand-over after "Sign in with Google" in the system browser: de.eltouro.app://login?t=… -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="de.eltouro.app" android:host="login" />
+            </intent-filter>
+
             <!-- Links to ElTouro open in the app -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
