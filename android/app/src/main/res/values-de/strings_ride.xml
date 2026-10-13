@@ -29,6 +29,7 @@
     <string name="diag_web_stalled">pausiert seit %1$s</string>
     <string name="diag_web_ok">antwortet · %1$s</string>
     <string name="diag_page_call">Letzter Aufruf der Seite</string>
+    <string name="diag_device_key">Geräteschlüssel für den Upload</string>
     <string name="diag_restarts">Neustarts durch das System</string>
     <string name="diag_perm_precise">Genauer Standort</string>
     <string name="diag_perm_background">Standort „Immer zulassen“</string>

@@ -126,6 +126,7 @@ class TrackerPlugin : Plugin() {
             RideState.session = 0
             RideState.active = false
             RideState.save(context)
+            RideWatchdog.cancel(context)
             context.stopService(Intent(context, TrackerService::class.java))
             call.resolve()
         }.start()
@@ -169,6 +170,8 @@ class TrackerPlugin : Plugin() {
     @PluginMethod
     fun clearRemember(call: PluginCall) {
         prefs().edit().remove("remember").apply()
+        val ctx = context
+        Thread { DeviceKey.revoke(ctx) }.start()   // signed out: the device key goes as well (the server revokes it on logout anyway)
         call.resolve()
     }
 

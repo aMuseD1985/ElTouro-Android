@@ -29,16 +29,21 @@ import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import de.eltouro.app.diag.Diag
-import org.json.JSONArray
-import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
+import de.eltouro.app.ride.Http
+import de.eltouro.app.ride.PointStore
+import de.eltouro.app.ride.SqlitePointStore
+import de.eltouro.app.ride.TrackPoint
+import de.eltouro.app.ride.Transport
+import de.eltouro.app.ride.UploadResult
+import de.eltouro.app.ride.Uploader
 import kotlin.math.roundToInt
 
 /**
  * Keeps the position coming while the display is off: a foreground service (visible notification) with fused location.
- * While a recording session is set, the points go straight to /api/track from here – independent of the web page,
- * which Android may pause in the background. The page gets every fix as an event as long as it is alive.
+ * While a recording session is set, every point goes into a SQLite buffer on the phone (M2) and from there to
+ * /api/track – with the app's device key, falling back to the WebView's cookie + CSRF. Nothing is lost in a dead zone,
+ * when the process is killed or after a reboot; the watchdog brings the service back. The page gets every fix as an
+ * event as long as it is alive.
  *
  * Diagnostics (M1): every lifecycle step, gap, upload failure and system state change goes to [Diag], plus one summary
  * line per minute – that log is what tells us why rides with the display off had holes.
@@ -50,7 +55,7 @@ class TrackerService : Service() {
         private const val NOTIFICATION_ID = 4711
         private const val UPLOAD_EVERY_MS = 15_000L
         private const val TICK_MS = 60_000L
-        private const val MAX_BUFFER = 6000
+        private const val MAX_STORED = 50_000                // about a day of riding at one point every 2 s
         private const val WAKE_TIMEOUT_MS = 30 * 60_000L   // renewed every minute while the ride runs
     }
 
@@ -60,7 +65,8 @@ class TrackerService : Service() {
     private lateinit var handler: Handler
     private var wakeLock: PowerManager.WakeLock? = null
     private var receiver: BroadcastReceiver? = null
-    private val buffer = ArrayList<JSONArray>()
+    private val store: PointStore by lazy { SqlitePointStore(this) }
+    private val uploader by lazy { Uploader(store, Transport { session, json -> send(session, json) }, { Diag.log(it) }) }
     private val uploadLock = Any()
     private var lastKept: Location? = null
     private var lastKeptAt = 0L
@@ -102,7 +108,7 @@ class TrackerService : Service() {
                 return START_NOT_STICKY
             }
         } else {
-            Diag.log("service: start session=${RideState.session}")
+            Diag.log("service: start session=${RideState.session}" + (intent.getStringExtra("restart")?.let { " (restart: $it)" } ?: ""))
         }
         createChannel()
         try {
@@ -120,8 +126,14 @@ class TrackerService : Service() {
         }
         renewWakeLock()
         startLocation()
+        RideWatchdog.arm(this)
+        handler.post {
+            Diag.bufferSize = store.count()
+            if (Diag.bufferSize > 0) Diag.log("buffer: ${Diag.bufferSize} points from before waiting for upload")
+            DeviceKey.ensure(this, appVersion())
+        }
         handler.removeCallbacks(uploadTick)
-        handler.postDelayed(uploadTick, UPLOAD_EVERY_MS)
+        handler.postDelayed(uploadTick, 2000)
         handler.removeCallbacks(minuteTick)
         handler.postDelayed(minuteTick, TICK_MS)
         return START_STICKY
@@ -181,84 +193,73 @@ class TrackerService : Service() {
         lastKept = l
         lastKeptAt = now
         try {
-            val pt = JSONArray()
-            pt.put(now)
-            pt.put((l.latitude * 1e6).roundToInt() / 1e6)
-            pt.put((l.longitude * 1e6).roundToInt() / 1e6)
-            pt.put(l.accuracy.roundToInt())
-            if (l.hasSpeed()) pt.put((l.speed * 3.6 * 10).roundToInt() / 10.0) else pt.put(JSONObject.NULL)
-            synchronized(buffer) {
-                buffer.add(pt)
-                if (buffer.size > MAX_BUFFER) buffer.removeAt(0)
-                Diag.bufferSize = buffer.size
-            }
-        } catch (_: Exception) { /* skip the point */ }
+            store.add(RideState.session, TrackPoint(now, (l.latitude * 1e6).roundToInt() / 1e6, (l.longitude * 1e6).roundToInt() / 1e6,
+                l.accuracy.roundToInt(), if (l.hasSpeed()) (l.speed * 3.6 * 10).roundToInt() / 10.0 else null))
+            Diag.bufferSize++
+        } catch (e: Exception) {
+            Diag.log("buffer: point not stored – ${e.javaClass.simpleName}")
+        }
     }
 
     /** Sends what is buffered. Blocks; never call on the main thread. Returns true when nothing is left behind. */
-    fun flushNow(): Boolean = flushLocked()
-
-    private fun flushLocked(): Boolean {
+    fun flushNow(): Boolean {
         synchronized(uploadLock) {
-            val session = RideState.session
-            val batch: List<JSONArray> = synchronized(buffer) {
-                if (session <= 0 || buffer.isEmpty()) return true
-                ArrayList(buffer).also { buffer.clear() }
-            }
-            var code = -1
-            var error = ""
-            try {
-                val pts = JSONArray()
-                for (a in batch) pts.put(a)
-                val body = JSONObject().put("action", "points").put("session_id", session).put("points", pts)
-                val c = URL(RideState.baseUrl + "/api/track").openConnection() as HttpURLConnection
-                c.requestMethod = "POST"
-                c.connectTimeout = 10_000
-                c.readTimeout = 15_000
-                c.doOutput = true
-                c.setRequestProperty("Content-Type", "application/json")
-                c.setRequestProperty("X-CSRF", RideState.csrf)
-                CookieManager.getInstance().getCookie(RideState.baseUrl)?.let { c.setRequestProperty("Cookie", it) }
-                c.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
-                code = c.responseCode
-                if (code !in 200..299) {
-                    error = try { (c.errorStream ?: c.inputStream)?.bufferedReader()?.use { it.readText() }?.take(120) ?: "" } catch (_: Exception) { "" }
-                }
-                c.disconnect()
+            if (RideState.baseUrl.isEmpty()) return false
+            val out = try {
+                uploader.flush()
             } catch (e: Exception) {
-                error = e.javaClass.simpleName   // no connection, timeout, unknown host …
+                Diag.log("upload: error – ${e.javaClass.simpleName}: ${e.message}")
+                return false
             }
-            val ok = code in 200..299
-            Diag.lastUploadAt = System.currentTimeMillis()
-            Diag.lastUploadCode = code
-            Diag.lastUploadError = error
-            if (ok) {
-                Diag.lastUploadOkAt = Diag.lastUploadAt
-                uploadedPoints += batch.size
-            } else {
-                Diag.failedUploads++
-                synchronized(buffer) {
-                    buffer.addAll(0, batch)
-                    while (buffer.size > MAX_BUFFER) buffer.removeAt(0)
-                    Diag.bufferSize = buffer.size
-                }
-            }
-            // log changes, not every round: 401 = session cookie gone, 400 = CSRF no longer valid, -1 = no network
-            val key = if (ok) "ok" else "$code $error"
+            val now = System.currentTimeMillis()
+            uploadedPoints += out.sent
+            Diag.bufferSize = try { store.count() } catch (_: Exception) { Diag.bufferSize }
+            val r = out.last ?: return out.ok          // nothing was waiting
+            Diag.lastUploadAt = now
+            Diag.lastUploadCode = r.code
+            Diag.lastUploadError = r.error.ifEmpty { r.body.take(120) }
+            if (out.ok) Diag.lastUploadOkAt = now else Diag.failedUploads++
+            // log changes, not every round: 401 = key/session gone, 400 = CSRF, 302 = access gate, -1 = no network
+            val key = if (out.ok) "ok" else "${r.code} ${r.error}"
             if (key != lastLoggedUpload) {
-                Diag.log(if (ok) "upload: ok again (HTTP $code, ${batch.size} points)" else "upload: failed – ${if (code > 0) "HTTP $code" else "no response"} $error · buffer ${Diag.bufferSize}")
+                Diag.log(if (out.ok) "upload: ok (HTTP ${r.code}, ${out.sent} points)"
+                    else "upload: failed – ${if (r.code > 0) "HTTP ${r.code}" else "no response"} ${r.error} · ${Diag.bufferSize} points kept")
                 lastLoggedUpload = key
             }
-            return ok
+            return out.ok
         }
     }
+
+    /** One upload request: device key first; without key (or when the server no longer knows it) cookie + CSRF as before. */
+    private fun send(session: Long, pointsJson: String): UploadResult {
+        val body = "{\"action\":\"points\",\"session_id\":$session,\"points\":$pointsJson}"
+        val url = RideState.baseUrl + "/api/track"
+        DeviceKey.get(this)?.let { key ->
+            val r = Http.postJson(url, body, DeviceKey.authHeaders(key))
+            if (r.code != 401) return r
+            DeviceKey.forget(this, "server answered 401")
+        }
+        val h = HashMap<String, String>()
+        h["X-CSRF"] = RideState.csrf
+        CookieManager.getInstance().getCookie(RideState.baseUrl)?.let { h["Cookie"] = it }
+        return Http.postJson(url, body, h)
+    }
+
+    private fun appVersion(): String = (application as? ElTouroApp)?.appVersion() ?: "?"
 
     private fun minuteSummary() {
         val m = Diag.fixes.takeMinute()
         val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
         Diag.log("minute: fixes=${m.fixes} acc=${m.meanAccuracyM?.roundToInt() ?: "-"}m buffer=${Diag.bufferSize} uploaded=$uploadedPoints" +
-            " session=${RideState.session} screen=${screenState()} doze=${pm?.isDeviceIdleMode} powersave=${pm?.isPowerSaveMode} wake=${wakeLockHeld()}")
+            " session=${RideState.session} screen=${screenState()} doze=${pm?.isDeviceIdleMode} powersave=${pm?.isPowerSaveMode} wake=${wakeLockHeld()}" +
+            " key=${DeviceKey.get(this) != null}")
         uploadedPoints = 0
+        if (RideState.active) RideWatchdog.arm(this)
+        try {
+            val dropped = store.trim(MAX_STORED)
+            if (dropped > 0) Diag.log("buffer: full – $dropped oldest points dropped")
+        } catch (_: Exception) { }
+        DeviceKey.ensure(this, appVersion())
     }
 
     private fun renewWakeLock() {
@@ -349,7 +350,8 @@ class TrackerService : Service() {
     }
 
     override fun onDestroy() {
-        Diag.log("service: destroyed (buffer ${Diag.bufferSize})")
+        Diag.log("service: destroyed (buffer ${Diag.bufferSize}, ride active=${RideState.active})")
+        if (!RideState.active) RideWatchdog.cancel(this)   // killed by the system mid-ride: the alarm stays and brings us back
         val c = client
         val cb = callback
         if (c != null && cb != null) c.removeLocationUpdates(cb)

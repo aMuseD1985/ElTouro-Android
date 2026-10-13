@@ -29,6 +29,7 @@
     <string name="diag_web_stalled">paused for %1$s</string>
     <string name="diag_web_ok">answering · %1$s</string>
     <string name="diag_page_call">Last call from the page</string>
+    <string name="diag_device_key">Device key for upload</string>
     <string name="diag_restarts">Restarts by the system</string>
     <string name="diag_perm_precise">Precise location</string>
     <string name="diag_perm_background">Location: allow all the time</string>

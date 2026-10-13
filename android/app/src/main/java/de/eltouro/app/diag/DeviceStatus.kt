@@ -5,6 +5,7 @@ import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.os.Build
 import android.os.PowerManager
+import de.eltouro.app.DeviceKey
 import de.eltouro.app.ElTouroApp
 import de.eltouro.app.R
 import de.eltouro.app.RideState
@@ -47,6 +48,7 @@ object DeviceStatus {
         s += StatusLine(null, ctx.getString(R.string.diag_page_call),
             if (Diag.lastPageCallAt > 0) Diag.lastPageCall + " · " + ago(Diag.lastPageCallAt) else "—")
         s += StatusLine(null, ctx.getString(R.string.diag_restarts), Diag.restarts(ctx).toString())
+        s += StatusLine(if (RideState.active) DeviceKey.get(ctx) != null else null, ctx.getString(R.string.diag_device_key), yn(DeviceKey.get(ctx) != null))
 
         // permissions and power
         s += StatusLine(Setup.hasPreciseLocation(ctx), ctx.getString(R.string.diag_perm_precise), yn(Setup.hasPreciseLocation(ctx)))
