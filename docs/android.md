@@ -44,6 +44,23 @@ Das Log enthält: Prozessstarts und Exit-Gründe des Systems, Start/Neustart/End
 Wechsel des Upload-Status (401 = Sitzung weg, 400 = CSRF, „no response“ = kein Netz), Pausen der Webseite und jede Minute eine
 Zusammenfassung. Keine Positionen, keine Cookies, kein CSRF-Token.
 
+## Gerätetest 2 (nach Aufgaben 1+2 aus `docs/handoff/aufgaben-nach-geraetetest-1.md`)
+
+**Diagnose** hat oben zwei neue Abschnitte (✗ rot, ✓ grün):
+- **Pfad der Aufzeichnung** – unterscheidet die drei Ursachen einer geraden Linie:
+  (a) *Seite nutzt die App* / *App-Brücke auf der Seite*: rot „Fahrseite OHNE App-Brücke“ = die Seite zeichnet im Browser auf;
+  (b) *GPS-Positionen (5 min)* getrennt nach Display an/aus und *Lücken bei Display aus*: rot = GPS liefert bei Display aus nichts;
+  (c) *Aufzeichnung* (Session) und *Punkte* gespeichert/hochgeladen/verworfen/wartend: rot = Positionen kommen, Punkte gehen verloren.
+- **Anmeldung** – angemeldet auf der Seite, „Angemeldet bleiben“-Token, Sitzungs-Cookie der WebView, Geräteschlüssel (Präfix),
+  letztes Anmelde-Ereignis.
+Die App fragt jede geladene Seite selbst (`BridgeProbe`, kein Web-Patch nötig) und protokolliert jeden Seitenwechsel nur mit Pfad.
+
+Testablauf:
+1. **Kaltstart-Login:** App aus den letzten Apps wischen → öffnen → „Mit Google anmelden“ → im Browser fertig → zurück in der App:
+   angemeldet? Dann App wischen → öffnen → noch angemeldet? Danach Handy-Einstellungen → Dunkelmodus umschalten → App bleibt angemeldet?
+2. **10 min „Freie Fahrt“ mit Aufzeichnung, Display aus**, Handy in der Tasche → `/drives`: hat die Linie Kurven?
+3. Direkt danach **Diagnose → Log teilen** schicken – auch wenn alles grün ist. Ein Screenshot vom Abschnitt „Pfad der Aufzeichnung“ hilft zusätzlich.
+
 ## Upload-Regeln (M2)
 
 `Uploader` (getestet in `UploaderTest`): 2xx → gesendete Punkte löschen; 404/409 → Session kennt der Server nicht mehr, ihre Punkte

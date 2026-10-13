@@ -55,7 +55,11 @@ class TrackerPlugin : Plugin() {
         RideState.title = call.getString("title", "ElTouro") ?: "ElTouro"
         RideState.text = call.getString("text", "") ?: ""
         RideState.session = call.getLong("session", 0L) ?: 0L
-        Diag.pageCall("start(session=${RideState.session})")
+        if (RideState.service == null) Diag.resetRide()   // a new ride, not a second start() of a running one
+        Diag.pageStartAt = System.currentTimeMillis()
+        Diag.pageStartSession = RideState.session
+        if (RideState.session > 0) Diag.sessionSetAt = Diag.pageStartAt
+        Diag.pageCall("start(session=${RideState.session}) native=true")
         if (getPermissionState("location") != PermissionState.GRANTED) {
             requestPermissionForAlias("location", call, "afterLocation")
             return
@@ -101,6 +105,7 @@ class TrackerPlugin : Plugin() {
         if (!csrf.isNullOrEmpty()) RideState.csrf = csrf
         RideState.session = call.getLong("session", 0L) ?: 0L
         RideState.save(context)
+        Diag.sessionSetAt = System.currentTimeMillis()
         Diag.pageCall("setSession(${RideState.session})")
         call.resolve()
     }
@@ -173,13 +178,17 @@ class TrackerPlugin : Plugin() {
     @PluginMethod
     fun setRemember(call: PluginCall) {
         val t = call.getString("token", "") ?: ""
-        if (t.matches(Regex("[0-9a-f]{64}"))) prefs().edit().putString("remember", t).apply()
+        if (t.matches(Regex("[0-9a-f]{64}"))) {
+            if (prefs().getString("remember", "") != t) Diag.login("stay-signed-in token stored")
+            prefs().edit().putString("remember", t).apply()
+        }
         call.resolve()
     }
 
     @PluginMethod
     fun clearRemember(call: PluginCall) {
         prefs().edit().remove("remember").apply()
+        Diag.login("stay-signed-in token cleared by the page (signed out or token invalid)")
         val ctx = context
         Thread { DeviceKey.revoke(ctx) }.start()   // signed out: the device key goes as well (the server revokes it on logout anyway)
         call.resolve()

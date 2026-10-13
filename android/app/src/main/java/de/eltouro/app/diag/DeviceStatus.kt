@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.PowerManager
 import de.eltouro.app.DeviceKey
 import de.eltouro.app.ElTouroApp
+import de.eltouro.app.Remember
 import de.eltouro.app.R
 import de.eltouro.app.RideState
 import de.eltouro.app.Setup
@@ -19,6 +20,69 @@ data class StatusLine(val ok: Boolean?, val label: String, val value: String) {
 }
 
 object DeviceStatus {
+    /**
+     * "Pfad der Aufzeichnung" – tells the three causes of a straight line apart at a glance:
+     * (a) the page records in the browser, (b) GPS delivers nothing with the display off, (c) fixes come, points are lost.
+     */
+    fun path(ctx: Context): List<StatusLine> {
+        val now = System.currentTimeMillis()
+        val s = mutableListOf<StatusLine>()
+        val running = RideState.service != null
+        fun ago(t: Long) = if (t <= 0) "—" else ctx.getString(R.string.diag_ago, formatDuration(now - t))
+        val p = Diag.probe
+
+        // (a)
+        s += when {
+            Diag.pageStartAt > 0 -> StatusLine(true, ctx.getString(R.string.path_page),
+                if (Diag.pageStartSession > 0 || RideState.session > 0) ctx.getString(R.string.path_page_started, ago(Diag.pageStartAt), maxOf(RideState.session, Diag.pageStartSession).toString())
+                else ctx.getString(R.string.path_page_started_norec, ago(Diag.pageStartAt)))
+            p != null && p.ridePage && !p.available -> StatusLine(false, ctx.getString(R.string.path_page), ctx.getString(R.string.path_page_browser))
+            p != null && p.ridePage -> StatusLine(null, ctx.getString(R.string.path_page), ctx.getString(R.string.path_page_open))
+            else -> StatusLine(null, ctx.getString(R.string.path_page), ctx.getString(R.string.path_page_none))
+        }
+        s += if (p == null) StatusLine(null, ctx.getString(R.string.path_bridge), "—")
+        else StatusLine(if (p.ridePage) p.available else null, ctx.getString(R.string.path_bridge),
+            ctx.getString(R.string.path_bridge_value, p.path, yn(ctx, p.available), yn(ctx, p.capacitor), ago(Diag.probeAt)))
+
+        // (b)
+        val w = Diag.fixes.window(now)
+        s += StatusLine(if (running) Diag.fixes.lastAt > 0 && now - Diag.fixes.lastAt < 20_000 else null, ctx.getString(R.string.path_fixes),
+            ctx.getString(R.string.path_fixes_value, w.displayOn, w.displayOff, ago(Diag.fixes.lastAt)))
+        s += StatusLine(if (Diag.fixes.total > 0) Diag.fixes.gapsDisplayOff == 0 else null, ctx.getString(R.string.path_gaps_off),
+            ctx.getString(R.string.diag_gaps_value, Diag.fixes.gapsDisplayOff, formatDuration(Diag.fixes.longestGapDisplayOffMs)))
+
+        // (c)
+        val sessionLost = (Diag.pageStartSession > 0 || Diag.sessionSetAt > 0) && RideState.active && RideState.session <= 0
+        s += StatusLine(if (sessionLost) false else null, ctx.getString(R.string.path_session),
+            if (RideState.session > 0) ctx.getString(R.string.path_session_value, RideState.session.toString(), ago(Diag.sessionSetAt))
+            else ctx.getString(R.string.path_session_none, Diag.fixesWithoutSession))
+        s += StatusLine(if (Diag.pointsStored + Diag.pointsDropped > 0) Diag.pointsDropped == 0 && (Diag.lastUploadAt == 0L || Diag.lastUploadCode in 200..299) else null,
+            ctx.getString(R.string.path_points), ctx.getString(R.string.path_points_value, Diag.pointsStored, Diag.pointsUploaded, Diag.pointsDropped, Diag.bufferSize))
+        return s
+    }
+
+    /** "Anmeldung": what keeps the rider signed in. */
+    fun login(ctx: Context): List<StatusLine> {
+        val now = System.currentTimeMillis()
+        val s = mutableListOf<StatusLine>()
+        val p = Diag.probe
+        s += StatusLine(p?.signedIn, ctx.getString(R.string.login_page),
+            when (p?.signedIn) { true -> ctx.getString(R.string.diag_yes); false -> ctx.getString(R.string.diag_no); null -> "—" } + (p?.let { " · " + it.path } ?: ""))
+        val remember = Remember.get(ctx) != null
+        s += StatusLine(remember, ctx.getString(R.string.login_remember), yn(ctx, remember))
+        val base = RideState.baseUrl.ifEmpty { "https://app.eltouro.de" }
+        val cookie = try { android.webkit.CookieManager.getInstance().getCookie(base)?.contains("eltouro_sid=") == true } catch (_: Exception) { false }
+        s += StatusLine(cookie, ctx.getString(R.string.login_cookie), yn(ctx, cookie))
+        val key = DeviceKey.get(ctx)
+        s += StatusLine(if (RideState.baseUrl.isNotEmpty()) key != null else null, ctx.getString(R.string.diag_device_key),
+            if (key != null) key.take(8) + "…" else ctx.getString(R.string.diag_no))
+        s += StatusLine(null, ctx.getString(R.string.login_last),
+            if (Diag.loginAt > 0) Diag.loginLast + " · " + ctx.getString(R.string.diag_ago, formatDuration(now - Diag.loginAt)) else "—")
+        return s
+    }
+
+    private fun yn(ctx: Context, b: Boolean) = ctx.getString(if (b) R.string.diag_yes else R.string.diag_no)
+
     fun snapshot(ctx: Context): List<StatusLine> {
         val now = System.currentTimeMillis()
         val s = mutableListOf<StatusLine>()
@@ -48,7 +112,6 @@ object DeviceStatus {
         s += StatusLine(null, ctx.getString(R.string.diag_page_call),
             if (Diag.lastPageCallAt > 0) Diag.lastPageCall + " · " + ago(Diag.lastPageCallAt) else "—")
         s += StatusLine(null, ctx.getString(R.string.diag_restarts), Diag.restarts(ctx).toString())
-        s += StatusLine(if (RideState.active) DeviceKey.get(ctx) != null else null, ctx.getString(R.string.diag_device_key), yn(DeviceKey.get(ctx) != null))
 
         // permissions and power
         s += StatusLine(Setup.hasPreciseLocation(ctx), ctx.getString(R.string.diag_perm_precise), yn(Setup.hasPreciseLocation(ctx)))

@@ -71,6 +71,7 @@ class TrackerService : Service() {
     private var lastKept: Location? = null
     private var lastKeptAt = 0L
     @Volatile private var uploadedPoints = 0
+    @Volatile private var displayOffSinceLastFix = false
     private var lastLoggedUpload = ""
 
     private val uploadTick = object : Runnable {
@@ -94,7 +95,9 @@ class TrackerService : Service() {
         handler = Handler(thread.looper)
         RideState.service = this
         Diag.serviceSince = System.currentTimeMillis()
-        Diag.log("service: created")
+        Diag.displayOn = (getSystemService(Context.POWER_SERVICE) as? PowerManager)?.isInteractive != false
+        displayOffSinceLastFix = !Diag.displayOn
+        Diag.log("service: created (display ${if (Diag.displayOn) "on" else "off"})")
         registerSystemReceiver()
     }
 
@@ -171,8 +174,10 @@ class TrackerService : Service() {
     }
 
     private fun onLocation(l: Location) {
-        val gap = Diag.fixes.onFix(System.currentTimeMillis(), l.accuracy)
-        if (gap > 0) Diag.log("location: gap of ${gap / 1000} s ended (screen ${screenState()})")
+        val displayOnThrough = Diag.displayOn && !displayOffSinceLastFix   // on the whole time since the previous fix
+        displayOffSinceLastFix = !Diag.displayOn
+        val gap = Diag.fixes.onFix(System.currentTimeMillis(), l.accuracy, displayOnThrough)
+        if (gap > 0) Diag.log("location: gap of ${gap / 1000} s ended (display ${if (displayOnThrough) "on" else "was off"})")
         Diag.lastAccuracyM = l.accuracy
         RideState.plugin?.let { p ->
             val o = JSObject()
@@ -184,7 +189,10 @@ class TrackerService : Service() {
             o.put("t", l.time)
             p.emitLocation(o)
         }
-        if (RideState.session <= 0) return
+        if (RideState.session <= 0) {
+            Diag.fixesWithoutSession++   // ride without "record": the position is used, nothing is stored
+            return
+        }
         // like the web recorder: at most one point every 2 s, and only when we have moved – standing at lights fills nothing
         val now = l.time
         if (now - lastKeptAt < 2000) return
@@ -196,6 +204,7 @@ class TrackerService : Service() {
             store.add(RideState.session, TrackPoint(now, (l.latitude * 1e6).roundToInt() / 1e6, (l.longitude * 1e6).roundToInt() / 1e6,
                 l.accuracy.roundToInt(), if (l.hasSpeed()) (l.speed * 3.6 * 10).roundToInt() / 10.0 else null))
             Diag.bufferSize++
+            Diag.pointsStored++
         } catch (e: Exception) {
             Diag.log("buffer: point not stored – ${e.javaClass.simpleName}")
         }
@@ -213,6 +222,8 @@ class TrackerService : Service() {
             }
             val now = System.currentTimeMillis()
             uploadedPoints += out.sent
+            Diag.pointsUploaded += out.sent
+            Diag.pointsDropped += out.dropped
             Diag.bufferSize = try { store.count() } catch (_: Exception) { Diag.bufferSize }
             val r = out.last ?: return out.ok          // nothing was waiting
             Diag.lastUploadAt = now
@@ -249,15 +260,19 @@ class TrackerService : Service() {
 
     private fun minuteSummary() {
         val m = Diag.fixes.takeMinute()
+        val w = Diag.fixes.window(System.currentTimeMillis())
         val pm = getSystemService(Context.POWER_SERVICE) as? PowerManager
-        Diag.log("minute: fixes=${m.fixes} acc=${m.meanAccuracyM?.roundToInt() ?: "-"}m buffer=${Diag.bufferSize} uploaded=$uploadedPoints" +
+        Diag.log("minute: fixes=${m.fixes} (5 min: display on ${w.displayOn}/off ${w.displayOff}) acc=${m.meanAccuracyM?.roundToInt() ?: "-"}m buffer=${Diag.bufferSize} uploaded=$uploadedPoints" +
             " session=${RideState.session} screen=${screenState()} doze=${pm?.isDeviceIdleMode} powersave=${pm?.isPowerSaveMode} wake=${wakeLockHeld()}" +
             " key=${DeviceKey.get(this) != null}")
         uploadedPoints = 0
         if (RideState.active) RideWatchdog.arm(this)
         try {
             val dropped = store.trim(MAX_STORED)
-            if (dropped > 0) Diag.log("buffer: full – $dropped oldest points dropped")
+            if (dropped > 0) {
+                Diag.pointsDropped += dropped
+                Diag.log("buffer: full – $dropped oldest points dropped")
+            }
         } catch (_: Exception) { }
         DeviceKey.ensure(this, appVersion())
     }
@@ -289,8 +304,8 @@ class TrackerService : Service() {
             override fun onReceive(context: Context, intent: Intent) {
                 val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
                 Diag.log("system: " + when (intent.action) {
-                    Intent.ACTION_SCREEN_ON -> "screen on"
-                    Intent.ACTION_SCREEN_OFF -> "screen off"
+                    Intent.ACTION_SCREEN_ON -> { Diag.displayOn = true; "screen on" }
+                    Intent.ACTION_SCREEN_OFF -> { Diag.displayOn = false; displayOffSinceLastFix = true; "screen off" }
                     PowerManager.ACTION_DEVICE_IDLE_MODE_CHANGED -> "doze=${pm?.isDeviceIdleMode}"
                     PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> "power save=${pm?.isPowerSaveMode}"
                     else -> intent.action

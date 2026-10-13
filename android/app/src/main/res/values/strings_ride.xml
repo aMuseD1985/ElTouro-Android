@@ -77,4 +77,27 @@
     <string name="guide_other">1. Switch battery optimization off for ElTouro (button above).\n2. Location → “Allow all the time” and precise location.\n3. Keep battery saver off during the ride.</string>
     <string name="guide_autostart">Open autostart</string>
     <string name="guide_app_settings">App settings</string>
+
+    <string name="diag_path">Recording path</string>
+    <string name="diag_login">Sign-in</string>
+    <string name="path_page">Page uses the app</string>
+    <string name="path_page_started">start() %1$s · recording #%2$s</string>
+    <string name="path_page_started_norec">start() %1$s · without recording</string>
+    <string name="path_page_browser">ride page WITHOUT app bridge – it records in the browser</string>
+    <string name="path_page_open">ride page open, not started yet</string>
+    <string name="path_page_none">no ride started yet</string>
+    <string name="path_bridge">App bridge on the page</string>
+    <string name="path_bridge_value">%1$s · bridge %2$s · Capacitor %3$s · %4$s</string>
+    <string name="path_fixes">GPS fixes (5 min)</string>
+    <string name="path_fixes_value">display on %1$d · display off %2$d · last %3$s</string>
+    <string name="path_gaps_off">Gaps with display off</string>
+    <string name="path_session">Recording session</string>
+    <string name="path_session_value">#%1$s · set %2$s</string>
+    <string name="path_session_none">none · %1$d fixes not stored</string>
+    <string name="path_points">Points</string>
+    <string name="path_points_value">stored %1$d · uploaded %2$d · dropped %3$d · waiting %4$d</string>
+    <string name="login_page">Signed in on the page</string>
+    <string name="login_remember">Stay signed in (token)</string>
+    <string name="login_cookie">Session cookie in the WebView</string>
+    <string name="login_last">Last sign-in event</string>
 </resources>

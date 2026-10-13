@@ -36,4 +36,44 @@ class FixStatsTest {
         assertEquals(0, empty.fixes)
         assertNull(empty.meanAccuracyM)
     }
+
+    @Test
+    fun separatesDisplayOnAndOff() {
+        val s = FixStats()
+        for (i in 0 until 30) s.onFix(i * 1000L, 5f, displayOn = true)
+        for (i in 30 until 50) s.onFix(i * 1000L, 5f, displayOn = false)
+        val w = s.window(49_000)
+        assertEquals(30, w.displayOn)
+        assertEquals(20, w.displayOff)
+    }
+
+    @Test
+    fun windowKeepsFiveMinutes() {
+        val s = FixStats()
+        s.onFix(0, 5f)
+        s.onFix(200_000, 5f, displayOn = false)
+        assertEquals(FixStats.Window(1, 1), s.window(250_000))
+        assertEquals("the first fix is older than 5 min now", FixStats.Window(0, 1), s.window(310_000))
+    }
+
+    @Test
+    fun gapWithDisplayOffIsCountedSeparately() {
+        val s = FixStats()
+        s.onFix(0, 5f)
+        s.onFix(30_000, 5f, displayOn = true)     // gap with the display on
+        s.onFix(130_000, 5f, displayOn = false)   // 100 s gap, display was off
+        assertEquals(2, s.gaps)
+        assertEquals(1, s.gapsDisplayOff)
+        assertEquals(100_000L, s.longestGapDisplayOffMs)
+    }
+
+    @Test
+    fun resetStartsFromZero() {
+        val s = FixStats()
+        s.onFix(0, 5f); s.onFix(60_000, 5f, displayOn = false)
+        s.reset()
+        assertEquals(0L, s.total)
+        assertEquals(0, s.gapsDisplayOff)
+        assertEquals("no gap after a reset", 0L, s.onFix(500_000, 5f))
+    }
 }

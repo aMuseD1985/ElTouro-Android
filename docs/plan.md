@@ -87,6 +87,18 @@ Uploader ohne Endlosschleife (Teilannahme `stored < gesendet` wird gelöscht), B
 Schlüssel-Erkennung nicht, `BOOT_COMPLETED` ist geschützt, FileProvider gibt nur `diag/` und nur pro URI frei.
 Nicht geprüft werden kann ohne Gerät: alles, was HyperOS tatsächlich tut – dafür ist M1 da.
 
+## Gerätetest 1 (13.10.2026 abends) – Login
+
+Marco: Login nach Google-Anmeldung/Neustart unzuverlässig; Aufzeichnung bei Display aus gerade Linie (Log fehlt noch).
+Der Verdacht der Web-Session (`openLink` laufe beim Kaltstart nicht) stimmt nicht: `BridgeActivity.load()` ruft
+`this.onNewIntent(getIntent())`, also `MainActivity.onNewIntent`. Ein zusätzlicher Aufruf in `onCreate` hätte den Einmal-Token
+**doppelt** eingelöst (so war es in der alten Java-Fassung) – der zweite scheitert und landet auf `/login`. Wahrscheinlicher:
+Android liefert den Start-Intent `de.eltouro.app://login?t=…` erneut, wenn HyperOS die App beendet hat und sie aus den letzten
+Apps zurückkommt oder die Activity neu aufgebaut wird (Dunkelmodus, Drehen) → verbrauchter Token → `/login`. Dazu ein möglicher
+Wettlauf beim Kaltstart (anonymes Session-Cookie der ersten Seite gegen das der Übergabe). Umgesetzt: Links aus dem Verlauf und
+bei Neuaufbau werden nicht wiederholt, jeder Login-Token wird nur einmal eingelöst (`UsedLinks`, SHA-256), die erste Seite wird
+vor der Übergabe gestoppt, und ohne Sitzungs-Cookie meldet die App die WebView selbst mit dem „angemeldet bleiben“-Token an.
+
 ## Offene Entscheidungen für Marco
 
 1. `CONSENT_VERSION` – wann erhöhen (Vorschlag: einmal mit M5).

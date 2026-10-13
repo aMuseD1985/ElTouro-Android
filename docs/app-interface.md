@@ -24,6 +24,10 @@ JS-Seite: `assets/native_tracker.js` im Web-Repo (`window.ElTouroNative`). Nativ
 
 Ereignis `location`: `{lat, lng, acc, heading?, speedMs?, t}` (jede Position, solange die Seite lebt).
 
+Die App fragt außerdem jede geladene Seite per `evaluateJavascript` ab (`BridgeProbe` – Diagnose): `location.pathname`,
+`window.ElTouroNative.available()`, `Capacitor.isNativePlatform()` und `document.getElementById('app-texts').dataset.user`
+(`'1'` = angemeldet). Diese Namen bitte nicht ändern.
+
 ## 2. Endpunkte, die die App direkt ruft
 
 | Endpunkt | Auth | Inhalt |
@@ -32,7 +36,7 @@ Ereignis `location`: `{lat, lng, acc, heading?, speedMs?, t}` (jede Position, so
 | `POST /api/app/device` | Session + `X-CSRF` | `{"action":"register","version":"…"}` → `{"token":"eld_…"}` |
 | `POST /api/app/device` | Geräteschlüssel | `{"action":"check"}` → `{"ok":true}`; `{"action":"revoke"}` |
 | `POST /api/app/remember` | Session + `X-CSRF` | → `{"token": 64 hex}` (holt die Seite, speichert die App) |
-| `GET /auth/app?t=…&next=…` / `?r=…` | Einmal-Token / Remember-Token | meldet die WebView an |
+| `GET /auth/app?t=…&next=…` / `?r=…` | Einmal-Token / Remember-Token | meldet die WebView an; die App selbst ruft `?r=` beim Start, wenn das Cookie `eltouro_sid` fehlt |
 | `GET /auth/app-return` | – | Ende der Google-Anmeldung im Browser → `de.eltouro.app://login?t=…&next=…` |
 
 Antworten, auf die sich die App verlässt (`Uploader`): 2xx = angekommen; `404`/`409` = Session unbekannt/nicht mehr offen →

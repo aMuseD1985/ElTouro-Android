@@ -33,6 +33,8 @@ import java.util.Locale
  */
 class DiagnoseActivity : AppCompatActivity() {
     private lateinit var setupBox: LinearLayout
+    private lateinit var pathView: TextView
+    private lateinit var loginView: TextView
     private lateinit var statusView: TextView
     private lateinit var logView: TextView
     private val h = Handler(Looper.getMainLooper())
@@ -61,6 +63,13 @@ class DiagnoseActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(16), dp(12), dp(16), dp(24))
         }
+        root.addView(heading(R.string.diag_path))
+        pathView = mono(13f)
+        root.addView(pathView)
+        root.addView(heading(R.string.diag_login))
+        loginView = mono(13f)
+        root.addView(loginView)
+
         root.addView(heading(R.string.setup_heading))
         root.addView(text(getString(R.string.setup_intro)))
         setupBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -179,6 +188,8 @@ class DiagnoseActivity : AppCompatActivity() {
     // ---- status and log
 
     private fun renderStatus() {
+        pathView.text = colored(DeviceStatus.path(this))
+        loginView.text = colored(DeviceStatus.login(this))
         statusView.text = DeviceStatus.snapshot(this).joinToString("\n") { it.asText() }
         logView.text = Diag.tail(80).reversed().joinToString("\n")
     }
@@ -191,6 +202,11 @@ class DiagnoseActivity : AppCompatActivity() {
             val f = File(dir, "eltouro-diagnose-$stamp.txt")
             val sb = StringBuilder()
             sb.append("ElTouro – Diagnose ").append(Date()).append("\n\n")
+            sb.append("-- Pfad der Aufzeichnung --\n")
+            DeviceStatus.path(this).forEach { sb.append(it.asText()).append('\n') }
+            sb.append("-- Anmeldung --\n")
+            DeviceStatus.login(this).forEach { sb.append(it.asText()).append('\n') }
+            sb.append("-- Zustand --\n")
             DeviceStatus.snapshot(this).forEach { sb.append(it.asText()).append('\n') }
             sb.append("\n---- Log ----\n").append(Diag.readAll())
             f.writeText(sb.toString(), Charsets.UTF_8)
@@ -210,6 +226,19 @@ class DiagnoseActivity : AppCompatActivity() {
     }
 
     // ---- tiny view helpers
+
+    /** ✗ lines red, ✓ lines green – the path check has to be readable at a glance on the bike */
+    private fun colored(lines: List<de.eltouro.app.diag.StatusLine>): CharSequence {
+        val sb = android.text.SpannableStringBuilder()
+        lines.forEachIndexed { i, l ->
+            if (i > 0) sb.append('\n')
+            val start = sb.length
+            sb.append(l.asText())
+            val color = when (l.ok) { true -> Color.rgb(46, 125, 50); false -> Color.rgb(198, 40, 40); null -> null }
+            if (color != null) sb.setSpan(android.text.style.ForegroundColorSpan(color), start, sb.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        return sb
+    }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 

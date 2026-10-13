@@ -12,7 +12,8 @@ class UploaderTest {
         val calls = mutableListOf<Pair<Long, String>>()
         override fun send(session: Long, pointsJson: String): UploadResult {
             calls += session to pointsJson
-            return if (answers.isNotEmpty()) answers.removeAt(0) else UploadResult(200, "{\"stored\":1}")
+            // default: the server stores everything it got
+            return if (answers.isNotEmpty()) answers.removeAt(0) else UploadResult(200, "{\"stored\":${pointsJson.split("],[").size}}")
         }
     }
 
@@ -80,6 +81,24 @@ class UploaderTest {
         Uploader(store, Fake(mutableListOf(UploadResult(200, "{\"stored\":0}"))), { logs += it }).flush()
         assertEquals(0, store.count())
         assertTrue(logs.single().contains("stored none"))
+    }
+
+    @Test
+    fun countsWhatTheServerDidNotStoreAsDropped() {
+        val store = MemoryPointStore()
+        repeat(10) { store.add(3, pt(it)) }
+        val out = Uploader(store, Fake(mutableListOf(UploadResult(200, "{\"stored\":7}"))), {}).flush()
+        assertEquals(7, out.sent)
+        assertEquals(3, out.dropped)
+        assertEquals(0, store.count())
+    }
+
+    @Test
+    fun droppedSessionCounts() {
+        val store = MemoryPointStore()
+        repeat(4) { store.add(5, pt(it)) }
+        val out = Uploader(store, Fake(mutableListOf(UploadResult(409))), {}).flush()
+        assertEquals(4, out.dropped)
     }
 
     @Test

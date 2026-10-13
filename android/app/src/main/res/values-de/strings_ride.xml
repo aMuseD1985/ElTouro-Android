@@ -77,4 +77,27 @@
     <string name="guide_other">1. Akku-Optimierung für ElTouro ausschalten (Knopf oben).\n2. Standort → „Immer zulassen“ und genauer Standort.\n3. Während der Fahrt den Energiesparmodus aus lassen.</string>
     <string name="guide_autostart">Autostart öffnen</string>
     <string name="guide_app_settings">App-Einstellungen</string>
+
+    <string name="diag_path">Pfad der Aufzeichnung</string>
+    <string name="diag_login">Anmeldung</string>
+    <string name="path_page">Seite nutzt die App</string>
+    <string name="path_page_started">start() %1$s · Aufzeichnung #%2$s</string>
+    <string name="path_page_started_norec">start() %1$s · ohne Aufzeichnung</string>
+    <string name="path_page_browser">Fahrseite OHNE App-Brücke – zeichnet im Browser auf</string>
+    <string name="path_page_open">Fahrseite offen, noch nicht gestartet</string>
+    <string name="path_page_none">noch keine Fahrt gestartet</string>
+    <string name="path_bridge">App-Brücke auf der Seite</string>
+    <string name="path_bridge_value">%1$s · Brücke %2$s · Capacitor %3$s · %4$s</string>
+    <string name="path_fixes">GPS-Positionen (5 min)</string>
+    <string name="path_fixes_value">Display an %1$d · Display aus %2$d · letzte %3$s</string>
+    <string name="path_gaps_off">Lücken bei Display aus</string>
+    <string name="path_session">Aufzeichnung</string>
+    <string name="path_session_value">#%1$s · gesetzt %2$s</string>
+    <string name="path_session_none">keine · %1$d Positionen nicht gespeichert</string>
+    <string name="path_points">Punkte</string>
+    <string name="path_points_value">gespeichert %1$d · hochgeladen %2$d · verworfen %3$d · wartend %4$d</string>
+    <string name="login_page">Angemeldet auf der Seite</string>
+    <string name="login_remember">Angemeldet bleiben (Token)</string>
+    <string name="login_cookie">Sitzungs-Cookie der WebView</string>
+    <string name="login_last">Letztes Anmelde-Ereignis</string>
 </resources>

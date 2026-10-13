@@ -53,7 +53,8 @@ unter `android/app/src/test/`. Marco testet auf einem **Xiaomi 15 Ultra (HyperOS
 |---|---|
 | M1 Diagnose + Härtung | gebaut, CI grün (erster Lauf 13.10., 21 Unit-Tests, keine Warnungen), APK `versionCode` 1003; **Gerätetest auf dem Xiaomi offen** – Marco schickt das Log |
 | M2 Aufzeichnung nativ (SQLite-Puffer, Geräteschlüssel, Watchdog) | App-Teil gebaut und in derselben APK; läuft bis zum Server-Teil mit Cookie + CSRF. Server-Teil: `docs/handoff/` (Tabelle `app_devices`, `/api/app/device`, `track.php`, Datenschutz „Android-App“; lokal gegen MariaDB getestet; `CONSENT_VERSION` bewusst nicht erhöht) – **Server-Teil im Web-Repo eingespielt (`fc55030`, test automatisch; live mit Marcos ZIP) – Antworten und Hinweise: `docs/handoff/from-web.md`** |
-| M3 Fahrmodus nativ (Navigation + Sprache) | offen – Port von `navigate.js` mit Golden-Tests |
+| Gerätetest 1 → Aufgaben | `docs/handoff/aufgaben-nach-geraetetest-1.md`: **1 Login bei Kaltstart, 2 Diagnose belegt den Pfad – gebaut**; 3–5 je nach Log (a/b/c), 6 App-Gefühl; Testablauf „Gerätetest 2“ in `docs/android.md` |
+| M3 Fahrmodus nativ (Navigation + Sprache) | offen – **erst wenn Aufgaben 1–5 am Gerät grün sind**; Port von `navigate.js` (Stand `?v=39` lesen) mit Golden-Tests |
 | M4 Kamera/Dateien, Teilen, Deep-Links | offen |
 | M5 FCM-Push | offen – Marco legt das Firebase-Projekt an |
 | M6 Widgets + Hintergrund-Prüfung | offen |

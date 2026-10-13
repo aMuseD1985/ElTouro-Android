@@ -31,6 +31,38 @@ object Diag {
     @Volatile var lastPageCallAt = 0L
     @Volatile var processStartedAt = 0L
 
+    // path check (Diagnose → "Pfad der Aufzeichnung"): which of (a) page in the browser, (b) no fixes, (c) points lost
+    @Volatile var displayOn = true
+    @Volatile var pageStartAt = 0L
+    @Volatile var pageStartSession = 0L
+    @Volatile var sessionSetAt = 0L
+    @Volatile var pointsStored = 0
+    @Volatile var pointsUploaded = 0
+    @Volatile var pointsDropped = 0
+    @Volatile var fixesWithoutSession = 0
+    @Volatile var probe: BridgeProbe? = null
+    @Volatile var probeAt = 0L
+
+    // sign-in (Diagnose → "Anmeldung")
+    @Volatile var loginLast = ""
+    @Volatile var loginAt = 0L
+
+    /** A new ride starts: the per-ride counters go back to zero. */
+    fun resetRide() {
+        fixes.reset()
+        pointsStored = 0
+        pointsUploaded = 0
+        pointsDropped = 0
+        fixesWithoutSession = 0
+        failedUploads = 0
+    }
+
+    fun login(what: String) {
+        loginLast = what
+        loginAt = System.currentTimeMillis()
+        log("login: $what")
+    }
+
     fun init(ctx: Context) {
         if (file == null) file = LogFile(File(ctx.filesDir, "diag"))
     }
