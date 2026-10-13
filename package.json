@@ -1,0 +1,16 @@
+{
+  "name": "eltouro-android",
+  "private": true,
+  "version": "0.1.0",
+  "description": "ElTouro Android shell (Capacitor): the web app in a WebView plus native background recording",
+  "scripts": {
+    "sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  }
+}
