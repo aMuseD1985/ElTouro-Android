@@ -7,6 +7,8 @@ module.exports = {
   appId: 'de.eltouro.app',
   appName: 'ElTouro',
   webDir: 'www',
+  // Lets the server tell the app from a browser (isApp() in core.php): no "keep the display on" hints, legal links in the profile
+  appendUserAgent: 'ElTouroApp/1',
   server: {
     url,
     cleartext: false,

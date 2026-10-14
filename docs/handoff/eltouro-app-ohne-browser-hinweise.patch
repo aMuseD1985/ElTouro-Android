@@ -1,0 +1,192 @@
+From f3bcf00a91203d8e1cf599ec07bda2fca3875301 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Wed, 14 Oct 2026 18:49:54 +0000
+Subject: [PATCH] In the app: no "keep the display on" hints, legal links in
+ the profile
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The Android app records with the display off, so the browser hints "Display
+nicht ausschalten …" (free ride, ride mode) are wrong there. isApp() (user
+agent "ElTouroApp/", sent by APKs from versionCode 1011) leaves them out;
+older APKs get class is-app from app-pref.js (Capacitor) and .web-only is
+hidden by CSS.
+
+- footer: left out in the app for signed-in riders; signed out it stays, so
+  imprint and privacy stay reachable without an account
+- profile: new section "§§ Rechtliches" at the end (imprint, privacy, terms,
+  feedback) – also on the web
+- app-pref.js v3, style.css v81
+---
+ assets/app-pref.js |  2 ++
+ assets/style.css   |  4 ++++
+ core.php           | 20 ++++++++++++++++----
+ free.php           |  4 ++--
+ lang.php           |  4 ++++
+ profile.php        |  9 +++++++++
+ tour_go.php        |  4 ++--
+ 7 files changed, 39 insertions(+), 8 deletions(-)
+
+diff --git a/assets/app-pref.js b/assets/app-pref.js
+index 4c52616..551ba90 100644
+--- a/assets/app-pref.js
++++ b/assets/app-pref.js
+@@ -15,4 +15,6 @@
+   if (mq && mq.addEventListener) mq.addEventListener('change', applyTheme);
+   window.elApplyTheme = applyTheme;
+   if ((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone) c.add('standalone');
++  // Inside the Android app (Capacitor injects its bridge before this script) – hides .web-only, see style.css and isApp() in core.php
++  if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) c.add('is-app');
+ })();
+diff --git a/assets/style.css b/assets/style.css
+index d12fa25..efa2464 100644
+--- a/assets/style.css
++++ b/assets/style.css
+@@ -998,3 +998,7 @@ body.ae-open { overflow: hidden; }
+ .warn-info { background: #EAF1F8; border-color: #B7CBE0; color: #1F4A73; }
+ .ride-done-box { max-height: 88vh; overflow-y: auto; }
+ .ride-done .intro-list { margin: .4rem 0; padding-left: 1.1rem; font-size: .92rem; }
++
++/* Inside the Android app: browser-only hints (keep the display on …) and the footer of signed-in riders are left out */
++.is-app .web-only { display: none !important; }
++.legal-links { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; margin: 0 0 .6rem; padding: 0; list-style: none; }
+diff --git a/core.php b/core.php
+index f67ca4d..5ed8eca 100644
+--- a/core.php
++++ b/core.php
+@@ -674,7 +674,7 @@ function pageHeader(string $title, array $meta = []): void
+     $banner = setting('banner_' . $LANG);
+     countPageView($path, $u !== null);
+     ?><!doctype html>
+-<html lang="<?= e($LANG) ?>">
++<html lang="<?= e($LANG) ?>"<?= isApp() ? ' class="is-app"' : '' ?>>
+ <head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width, initial-scale=1">
+@@ -687,9 +687,9 @@ function pageHeader(string $title, array $meta = []): void
+ <meta name="apple-mobile-web-app-capable" content="yes">
+ <meta name="apple-mobile-web-app-title" content="ElTouro">
+ <meta name="apple-mobile-web-app-status-bar-style" content="default">
+-<script src="/assets/app-pref.js?v=2"></script>
++<script src="/assets/app-pref.js?v=3"></script>
+ <script src="/assets/map_styles.js?v=4"></script>
+-<link rel="stylesheet" href="/assets/style.css?v=80">
++<link rel="stylesheet" href="/assets/style.css?v=81">
+ <meta name="theme-color" content="#14263F">
+ <?php foreach ($meta as $property => $content): ?><meta <?= str_starts_with($property, 'og:') ? 'property' : 'name' ?>="<?= e($property) ?>" content="<?= e($content) ?>">
+ <?php endforeach; ?>
+@@ -751,11 +751,22 @@ function pageHeader(string $title, array $meta = []): void
+     unset($_SESSION['flash']);
+ }
+ 
++/**
++ * The page is shown inside the ElTouro Android app (aMuseD1985/ElTouro-Android). The app appends "ElTouroApp/<version>" to its
++ * user agent; older APKs without it are caught in the browser by assets/app-pref.js (class "is-app" from Capacitor).
++ * Used to leave out what only makes sense in a browser – "keep the display on", the footer for signed-in riders.
++ */
++function isApp(): bool
++{
++    return str_contains((string)($_SERVER['HTTP_USER_AGENT'] ?? ''), 'ElTouroApp/');
++}
++
+ function pageFooter(): void
+ {
+     ?>
+ </main>
+-<footer class="site-footer">
++<?php if (!(isApp() && currentUser())): /* in the app the legal links live in the profile ("§§ Rechtliches"); signed out they stay here */ ?>
++<footer class="site-footer<?= currentUser() ? ' web-only' : '' ?>">
+   <p>© <?= date('Y') ?> ElTouro</p>
+   <nav>
+     <a href="/imprint"><?= te('footer.imprint') ?></a>
+@@ -764,6 +775,7 @@ function pageFooter(): void
+     <?php if (currentUser()): ?><a href="/feedback?from=<?= e(rawurlencode((string)(strtok($_SERVER['REQUEST_URI'] ?? '/', '?') ?: '/'))) ?>"><?= te('footer.feedback') ?></a><?php endif; ?>
+   </nav>
+ </footer>
++<?php endif; ?>
+ <?php $appTexts = [];
+ foreach (['install_title', 'install_text', 'install_button', 'later', 'ios_text', 'installed', 'back', 'select_on', 'select_off', 'pw_show', 'pw_hide'] as $k) {
+     $appTexts[$k] = t('app.' . $k);
+diff --git a/free.php b/free.php
+index 6f7cc55..d496e1f 100644
+--- a/free.php
++++ b/free.php
+@@ -8,7 +8,7 @@ $resume = activeRecording((int)$me['id'], null);
+ pageHeader(t('free.title'));
+ ?>
+ <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">
+-<p class="keep-open" role="note">📵 <?= te('nav.keep_open') ?></p>
++<?php if (!isApp()): /* the app records with the display off */ ?><p class="keep-open web-only" role="note">📵 <?= te('nav.keep_open') ?></p><?php endif; ?>
+ <h1><?= te('free.title') ?></h1>
+ <p class="muted"><?= te($resume ? 'free.resumed' : 'free.intro') ?></p>
+ <section class="panel free-ride" id="free" data-csrf="<?= e(csrfToken()) ?>" data-running="<?= te('nav.ride_running') ?>" data-resumed="<?= te('free.resumed') ?>" data-decimal="<?= te('common.decimal_point') ?>" data-resume="<?= $resume ? (int)$resume['id'] : '' ?>"
+@@ -25,7 +25,7 @@ pageHeader(t('free.title'));
+   <button id="f-stop" type="button" class="btn hold-btn" hidden><span class="hold-fill"></span><?= te('nav.stop_button') ?><small><?= te('nav.stop_hold') ?></small></button>
+ </section>
+ <?= holderTip() ?>
+-<p class="hint"><?= te('free.privacy') ?> <?= te('nav.screen_hint') ?></p>
++<p class="hint"><?= te('free.privacy') ?><?php if (!isApp()): ?> <span class="web-only"><?= te('nav.screen_hint') ?></span><?php endif; ?></p>
+ <script src="/assets/vendor/leaflet/leaflet.js"></script>
+ <script src="/assets/native_tracker.js?v=4"></script>
+ <script src="/assets/free_ride.js?v=3"></script>
+diff --git a/lang.php b/lang.php
+index 05fe812..07737f9 100644
+--- a/lang.php
++++ b/lang.php
+@@ -639,6 +639,8 @@ return [
+     'nav.resume_discard' => 'Fahrt beenden und neu starten',
+     'nav.ready_resume' => 'Deine Fahrt läuft noch – tippe auf „Fahrt fortsetzen“.',
+     'nav.ride_running' => 'Fahrt läuft',
++    'profile.legal_title' => '§§ Rechtliches',
++    'profile.legal_feedback' => 'Etwas fehlt oder klemmt?',
+     'nav.keep_open' => 'Display nicht ausschalten und ElTouro geöffnet lassen – sonst wird die Aufzeichnung unterbrochen!',
+     'nav.screen_hint' => 'Lass den Bildschirm an: Viele Handys pausieren Browser und Ortung, sobald das Display aus ist oder die App in den Hintergrund geht. Die Fahrt geht trotzdem nicht verloren – öffne ElTouro wieder und tippe auf „Fahrt fortsetzen“.',
+     'home.running' => 'Fahrt läuft: {title}',
+@@ -2331,6 +2333,8 @@ return [
+     'nav.resume_discard' => 'End ride and start over',
+     'nav.ready_resume' => 'Your ride is still running – tap "Resume ride".',
+     'nav.ride_running' => 'Ride running',
++    'profile.legal_title' => '§§ Legal',
++    'profile.legal_feedback' => 'Something missing or stuck?',
+     'nav.keep_open' => 'Do not switch the display off and keep ElTouro open – otherwise the recording is interrupted!',
+     'nav.screen_hint' => 'Keep the screen on: many phones pause the browser and the location as soon as the display is off or the app goes to the background. The ride is not lost – open ElTouro again and tap "Resume ride".',
+     'home.running' => 'Ride running: {title}',
+diff --git a/profile.php b/profile.php
+index 0c0c960..ff8d7f0 100644
+--- a/profile.php
++++ b/profile.php
+@@ -171,6 +171,15 @@ pageHeader(t('profile.title'));
+   <p class="muted"><?= $brought > 0 ? te('invite.count', ['n' => $brought]) : te('invite.none') ?></p>
+   <?php if ($cameVia && $cameVia['display_name']): ?><p class="muted"><?= te('invite.came_via', ['name' => $cameVia['display_name']]) ?></p><?php endif; ?>
+ </section>
++<section class="panel narrow" id="legal">
++  <h2><?= te('profile.legal_title') ?></h2>
++  <ul class="legal-links">
++    <li><a href="/imprint"><?= te('footer.imprint') ?></a></li>
++    <li><a href="/privacy"><?= te('footer.privacy') ?></a></li>
++    <li><a href="/terms"><?= te('footer.terms') ?></a></li>
++  </ul>
++  <p class="hint"><?= te('profile.legal_feedback') ?> <a href="/feedback?from=%2Fprofile"><?= te('footer.feedback') ?></a></p>
++</section>
+ <script src="/assets/share.js?v=1"></script>
+ <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">
+ <script src="/assets/vendor/leaflet/leaflet.js"></script>
+diff --git a/tour_go.php b/tour_go.php
+index 336d3ac..c0db5d2 100644
+--- a/tour_go.php
++++ b/tour_go.php
+@@ -69,8 +69,8 @@ pageHeader(t('nav.title', ['title' => $tour['title']]));
+     <?php if (!$sim): ?><button type="button" id="ride-info-btn" class="info-btn" aria-expanded="false" aria-controls="ride-keepopen" aria-label="<?= te('nav.info') ?>">i</button><?php endif; ?>
+   </div>
+   <div class="ride-keepopen" id="ride-keepopen" role="note" hidden>
+-    <p id="ride-keepopen-warn" hidden>📵 <?= te('nav.keep_open') ?></p>
+-    <p id="ride-hints" hidden><?= te('nav.record_hint') ?> <?= te('nav.live_hint') ?> <?= te('nav.screen_hint') ?> <button type="button" class="link" id="ride-battery" hidden>🔋 <?= te('nav.battery') ?></button></p>
++    <p id="ride-keepopen-warn" class="web-only" hidden><?= isApp() ? '' : '📵 ' . te('nav.keep_open') ?></p>
++    <p id="ride-hints" hidden><?= te('nav.record_hint') ?> <?= te('nav.live_hint') ?><?php if (!isApp()): ?> <span class="web-only"><?= te('nav.screen_hint') ?></span><?php endif; ?> <button type="button" class="link" id="ride-battery" hidden>🔋 <?= te('nav.battery') ?></button></p>
+   </div>
+   <p class="ride-subtitle" id="ride-subtitle" hidden></p>
+ 
+-- 
+2.43.0
+

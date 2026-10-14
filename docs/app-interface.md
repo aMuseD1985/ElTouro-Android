@@ -28,6 +28,10 @@ Ereignis `location`: `{lat, lng, acc, heading?, speedMs?, t}` (jede Position, so
 (`CookieHop`) statt über die WebView, weil Capacitors Proxy das Cookie einer Weiterleitung verliert. Kommt im Web-Repo eine
 weitere GET-Seite dazu, die Cookies setzt und weiterleitet, muss sie in `CookieHop.SIGN_IN_PATHS` (oder als POST gebaut werden).
 
+**App erkennen:** Die App hängt `ElTouroApp/<n>` an ihren User-Agent (ab `versionCode` 1011). Der Server lässt damit
+Browser-Hinweise („Display an lassen“) und die Fußzeile angemeldeter Fahrer weg (`isApp()`), Rechtliches steht im Profil
+(„§§ Rechtliches“). Für ältere APKs: Klasse `is-app` an `<html>` (aus `app-pref.js`), `.web-only` wird ausgeblendet.
+
 Die App fragt außerdem jede geladene Seite per `evaluateJavascript` ab (`BridgeProbe` – Diagnose): `location.pathname`,
 `window.ElTouroNative.available()`, `Capacitor.isNativePlatform()` und `document.getElementById('app-texts').dataset.user`
 (`'1'` = angemeldet). Diese Namen bitte nicht ändern.
