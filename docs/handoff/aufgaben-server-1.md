@@ -2,7 +2,7 @@
 
 Drei Aufträge aus Marcos Test und Wünschen. Teil 1 und 2 betreffen den Fahrmodus (`track.php`, `track_lib.php`, `tour_go.php`,
 `free.php`, `navigate.js`, `free_ride.js`), Teil 3 ist ein neuer Endpunkt für die Homescreen-Widgets der App. Die App-Seite ist für
-alle drei schon gebaut (APK nach `90974ff`…). Bitte Antwort als `docs/handoff/from-web-4.md`.
+alle drei schon gebaut (APK `versionCode` 1010). Bitte Antwort als `docs/handoff/from-web-4.md`.
 
 ---
 
