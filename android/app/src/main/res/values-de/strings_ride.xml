@@ -100,4 +100,34 @@
     <string name="login_remember">Angemeldet bleiben (Token)</string>
     <string name="login_cookie">Sitzungs-Cookie der WebView</string>
     <string name="login_last">Letztes Anmelde-Ereignis</string>
+
+    <string name="widget_free_name">ElTouro · Freie Fahrt</string>
+    <string name="widget_free_desc">Mit einem Tipp eine freie Fahrt aufzeichnen – oder zurück zur laufenden Fahrt</string>
+    <string name="widget_free_action">▶ Freie Fahrt aufzeichnen</string>
+    <string name="widget_free_sub">Ein Tipp – und los</string>
+    <string name="widget_free_resume">● Fahrt läuft – zurück zur Fahrt</string>
+    <string name="widget_free_running">gestartet %1$s</string>
+    <string name="widget_near_name">ElTouro · In der Nähe</string>
+    <string name="widget_near_desc">Ausfahrten und Touren in deiner Nähe</string>
+    <string name="widget_near_title">In der Nähe</string>
+    <string name="widget_near_title_at">Bei %1$s</string>
+    <string name="widget_herds_name">ElTouro · Deine Herden</string>
+    <string name="widget_herds_desc">Neue Nachrichten in deinen Herden</string>
+    <string name="widget_herds_title">Deine Herden</string>
+    <string name="widget_herds_title_n">Deine Herden · %1$d neu</string>
+    <string name="widget_news_name">ElTouro · Was gibt’s Neues</string>
+    <string name="widget_news_desc">Was es für dich Neues gibt</string>
+    <string name="widget_news_title">Was gibt’s Neues</string>
+    <string name="widget_empty_near">Gerade nichts in deiner Nähe</string>
+    <string name="widget_empty_herds">Keine neuen Nachrichten</string>
+    <string name="widget_empty_news">Nichts Neues</string>
+    <string name="widget_need_login">Öffne ElTouro und melde dich an</string>
+    <string name="widget_not_yet">Kommt mit dem nächsten Server-Update – Tippen öffnet die Seite</string>
+    <string name="widget_loading">Wird geladen …</string>
+    <string name="widget_offline">Offline · Stand %1$s</string>
+    <string name="widget_updated">Stand %1$s</string>
+    <string name="widget_km">%1$s km</string>
+    <string name="widget_km_away">%1$s km entfernt</string>
+    <string name="widget_unread">%1$d neu</string>
+    <string name="diag_widgets">Widgets (Übersicht vom Server)</string>
 </resources>

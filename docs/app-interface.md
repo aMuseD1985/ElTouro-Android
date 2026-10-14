@@ -37,6 +37,7 @@ Die App fragt außerdem jede geladene Seite per `evaluateJavascript` ab (`Bridge
 | Endpunkt | Auth | Inhalt |
 |---|---|---|
 | `POST /api/track` | Geräteschlüssel (`Authorization: Bearer eld_…` **und** `X-Device-Token`) oder Session-Cookie + `X-CSRF` | `{"action":"points","session_id":n,"points":[[unixMs,lat,lng,acc,kmh\|null],…]}` → `{"stored":n}`; höchstens 600 Punkte (`TRACK_MAX_BATCH`) |
+| `GET /api/app/summary?v=1[&lat&lng]` | Geräteschlüssel | Übersicht für die Widgets – Format in `docs/handoff/aufgaben-server-1.md` (Teil 3); 404 = noch nicht da |
 | `POST /api/app/device` | Session + `X-CSRF` | `{"action":"register","version":"…"}` → `{"token":"eld_…"}` |
 | `POST /api/app/device` | Geräteschlüssel | `{"action":"check"}` → `{"ok":true}`; `{"action":"revoke"}` |
 | `POST /api/app/remember` | Session + `X-CSRF` | → `{"token": 64 hex}` (holt die Seite, speichert die App) |

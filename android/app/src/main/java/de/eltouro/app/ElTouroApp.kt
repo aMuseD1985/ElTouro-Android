@@ -12,6 +12,7 @@ class ElTouroApp : Application() {
         Diag.init(this)
         Diag.processStartedAt = System.currentTimeMillis()
         RideState.load(this)
+        if (RideState.baseUrl.isEmpty()) RideState.baseUrl = getSharedPreferences("eltouro_app", MODE_PRIVATE).getString("base", "") ?: ""
         Diag.log("process start pid=${Process.myPid()} app=${appVersion()} android=${Build.VERSION.RELEASE} (sdk ${Build.VERSION.SDK_INT})" +
             " ride active=${RideState.active} session=${RideState.session}")
         Diag.logExitReasons(this)

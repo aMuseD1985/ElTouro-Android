@@ -27,7 +27,8 @@ class MainActivity : BridgeActivity() {
     private val h = Handler(Looper.getMainLooper())
     private var creating = false        // inside super.onCreate: BridgeActivity.load() hands the launch intent to onNewIntent
     private var recreated = false       // configuration change or restore after the process was killed
-    private var linkHandled = false
+    private var linkHandled = false     // a login link signed in – nothing else to do on this start
+    private var startPath: String? = null   // cold start: page asked for by the intent (notification, widget)
     private var lastProbe = ""
     private var firstPageLoaded = false   // the bridge's first page (and its anonymous cookie, if any) is done
     private val pending = ArrayList<() -> Unit>()
@@ -41,11 +42,15 @@ class MainActivity : BridgeActivity() {
         super.onCreate(savedInstanceState)   // → BridgeActivity.load() → onNewIntent(getIntent()) → handleLink (cold start)
         creating = false
         CookieManager.getInstance().setAcceptCookie(true)
+        getBridge()?.config?.serverUrl?.replace(Regex("/+$"), "")?.let { base ->
+            getSharedPreferences("eltouro_app", Context.MODE_PRIVATE).edit().putString("base", base).apply()
+            if (RideState.baseUrl.isEmpty()) RideState.baseUrl = base
+        }
         getBridge()?.let { b ->
             b.addWebViewListener(pageListener)
             b.setWebViewClient(SignInAwareClient(b))   // pages that sign in never go through Capacitor's proxy (see CookieHop)
         }
-        if (!linkHandled) restoreSignIn()
+        if (!linkHandled) start(startPath ?: RideState.resumablePath() ?: "/")
         heartbeat.start()
     }
 
@@ -56,6 +61,7 @@ class MainActivity : BridgeActivity() {
 
     override fun onResume() {
         super.onResume()
+        de.eltouro.app.widget.Widgets.refreshAsync(this, 5 * 60_000L)
         if (RideState.service != null) Diag.log("activity: resumed")
     }
 
@@ -88,6 +94,18 @@ class MainActivity : BridgeActivity() {
      * Logged without token or query string.
      */
     private fun handleLink(intent: Intent?, coldStart: Boolean): Boolean {
+        if (intent != null && ACTION_OPEN == intent.action) {
+            val path = intent.getStringExtra(EXTRA_PATH)
+            if (path == null || !isAppPath(path)) return false
+            if (coldStart) {
+                startPath = path          // after the sign-in check in onCreate
+            } else {
+                Diag.log("open: ${path.substringBefore('?')} (notification/widget)")
+                val base = getBridge()?.config?.serverUrl?.replace(Regex("/+$"), "") ?: return false
+                navigate(base + path)
+            }
+            return false                   // not a sign-in: onCreate still checks the session cookie
+        }
         if (intent == null || Intent.ACTION_VIEW != intent.action) return false
         val data: Uri = intent.data ?: return false
         val fromHistory = (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
@@ -135,18 +153,28 @@ class MainActivity : BridgeActivity() {
     }
 
     /**
-     * Cold start without a link: if the WebView has no session cookie any more but the "stay signed in" token is there,
-     * sign in with it right away (/auth/app?r=…) – before the first page, instead of waiting for the page to do it.
+     * Cold start without a login link: open [path] – the page asked for by the notification or a widget, or the running ride
+     * (so a restart in the middle of a ride brings the rider straight back to it). If the WebView has no session cookie any more
+     * but the "stay signed in" token is there, sign in with it first (/auth/app?r=…&next=path) – before the first page, instead
+     * of waiting for the page to do it.
      */
-    private fun restoreSignIn() {
+    private fun start(path: String) {
         val base = getBridge()?.config?.serverUrl?.replace(Regex("/+$"), "") ?: return
         val cookie = CookieManager.getInstance().getCookie(base)
         val hasSession = cookie?.contains("eltouro_sid=") == true
         val remember = Remember.get(this)
         Diag.log("start: ${if (recreated) "activity recreated" else "cold start"} · session cookie=${if (hasSession) "yes" else "no"}" +
-            " · stay signed in=${if (remember != null) "yes" else "no"}")
-        if (!hasSession && remember != null) openNatively("$base/auth/app?r=$remember&next=%2F", "stay signed in (no session cookie)")
+            " · stay signed in=${if (remember != null) "yes" else "no"} · open ${path.substringBefore('?')}" +
+            (if (RideState.resumablePath() != null) " (ride #${RideState.session} running)" else ""))
+        if (!hasSession && remember != null) {
+            openNatively("$base/auth/app?r=$remember&next=" + Uri.encode(path), "stay signed in (no session cookie)")
+        } else if (path != "/") {
+            whenFirstPageLoaded { navigate(base + path) }
+        }
     }
+
+    /** Only paths of our own server: "/…", never "//host" or a scheme. */
+    private fun isAppPath(p: String) = p.startsWith("/") && !p.startsWith("//") && !p.contains("://") && p.length < 300
 
     private fun navigate(url: String) {
         val wv = getBridge()?.webView ?: return
@@ -268,6 +296,15 @@ class MainActivity : BridgeActivity() {
         val p = BridgeProbe.parse(raw) ?: return
         Diag.probe = p
         Diag.probeAt = System.currentTimeMillis()
+        // signed in: keep the page's CSRF token and get the device key even without a ride (widgets need it)
+        if (p.signedIn == true && p.csrf != null && p.csrf != RideState.csrf) {
+            RideState.csrf = p.csrf
+            RideState.save(this)
+        }
+        if (p.signedIn == true && RideState.csrf.isNotEmpty() && DeviceKey.get(this) == null) {
+            val app = application as? ElTouroApp
+            Thread { if (DeviceKey.ensure(this, app?.appVersion() ?: "?")) de.eltouro.app.widget.Widgets.refreshAsync(this, 0) }.start()
+        }
         val s = p.summary()
         if (s != lastProbe) {
             lastProbe = s
@@ -333,6 +370,9 @@ class MainActivity : BridgeActivity() {
     }
 
     companion object {
+        /** Opens a page of the web app inside the app: extra [EXTRA_PATH] = "/free", "/crew/x/talk" … (notification, widgets) */
+        const val ACTION_OPEN = "de.eltouro.app.OPEN"
+        const val EXTRA_PATH = "path"
         private val OWN_HOSTS = setOf("app.eltouro.de", "test.eltouro.de", "beta.eltouro.de")
     }
 }

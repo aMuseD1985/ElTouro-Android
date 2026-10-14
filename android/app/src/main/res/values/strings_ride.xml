@@ -100,4 +100,34 @@
     <string name="login_remember">Stay signed in (token)</string>
     <string name="login_cookie">Session cookie in the WebView</string>
     <string name="login_last">Last sign-in event</string>
+
+    <string name="widget_free_name">ElTouro · Free ride</string>
+    <string name="widget_free_desc">Start recording a free ride with one tap – or go back to the running ride</string>
+    <string name="widget_free_action">▶ Record a free ride</string>
+    <string name="widget_free_sub">One tap and off you go</string>
+    <string name="widget_free_resume">● Ride running – back to it</string>
+    <string name="widget_free_running">started %1$s</string>
+    <string name="widget_near_name">ElTouro · Near you</string>
+    <string name="widget_near_desc">Rides and tours near you</string>
+    <string name="widget_near_title">Near you</string>
+    <string name="widget_near_title_at">Near %1$s</string>
+    <string name="widget_herds_name">ElTouro · Your crews</string>
+    <string name="widget_herds_desc">New messages in your crews</string>
+    <string name="widget_herds_title">Your crews</string>
+    <string name="widget_herds_title_n">Your crews · %1$d new</string>
+    <string name="widget_news_name">ElTouro · What’s new</string>
+    <string name="widget_news_desc">What’s new for you on ElTouro</string>
+    <string name="widget_news_title">What’s new</string>
+    <string name="widget_empty_near">Nothing near you right now</string>
+    <string name="widget_empty_herds">No new messages</string>
+    <string name="widget_empty_news">Nothing new</string>
+    <string name="widget_need_login">Open ElTouro and sign in</string>
+    <string name="widget_not_yet">Coming with the next server update – tap to open the page</string>
+    <string name="widget_loading">Loading …</string>
+    <string name="widget_offline">Offline · as of %1$s</string>
+    <string name="widget_updated">As of %1$s</string>
+    <string name="widget_km">%1$s km</string>
+    <string name="widget_km_away">%1$s km away</string>
+    <string name="widget_unread">%1$d new</string>
+    <string name="diag_widgets">Widgets (overview from the server)</string>
 </resources>

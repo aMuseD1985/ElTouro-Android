@@ -64,6 +64,18 @@ Seit „CookieHop“ zeigt *Anmeldung → Letztes Anmelde-Ereignis* jede Überga
 2. **10 min „Freie Fahrt“ mit Aufzeichnung, Display aus**, Handy in der Tasche → `/drives`: hat die Linie Kurven?
 3. Direkt danach **Diagnose → Log teilen** schicken – auch wenn alles grün ist. Ein Screenshot vom Abschnitt „Pfad der Aufzeichnung“ hilft zusätzlich.
 
+## Widgets (14.10.2026)
+
+Lange auf den Homescreen drücken → Widgets → ElTouro: **Freie Fahrt** (2×1: ein Tipp öffnet `/free?autostart=1`; läuft eine Fahrt,
+„● Fahrt läuft – zurück zur Fahrt“), **In der Nähe**, **Deine Herden**, **Was gibt's Neues** (4×2, je drei Einträge, Tippen öffnet die
+Seite in der App, ↻ lädt neu, Titel öffnet die Übersicht). Die drei Listen brauchen den Geräteschlüssel (holt die App nach der
+Anmeldung von selbst) und `GET /api/app/summary` auf dem Server – bis dahin „Kommt mit dem nächsten Server-Update“.
+Zustand in Diagnose → Anmeldung → „Widgets“ (`ok`, `not_available` = Endpunkt fehlt, `no_key`, `offline`).
+
+**Test:** alle vier Widgets ablegen. Freie Fahrt antippen → App öffnet `/free`. Eine Fahrt starten → Widget zeigt „Fahrt läuft“;
+App wegwischen, Widget antippen → zurück in der laufenden Fahrt. Eine Fahrt starten, App wegwischen, App normal öffnen → landet
+direkt in der Fahrt.
+
 ## Upload-Regeln (M2)
 
 `Uploader` (getestet in `UploaderTest`): 2xx → gesendete Punkte löschen; 404/409 → Session kennt der Server nicht mehr, ihre Punkte

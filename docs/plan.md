@@ -108,6 +108,18 @@ und dann laden → angemeldet. Betroffen waren Google-Übergabe, „angemeldet b
 Weiterleitung auf, nimmt die Cookies der Antwort in den Cookie-Speicher der WebView und lädt dann das Ziel; Navigationen der Seite
 dorthin fängt `SignInAwareClient` ab; ausgeführt erst nach der ersten fertigen Seite (deren anonymes Cookie käme sonst danach).
 
+## 14.10.2026 – Fahrt nach Neustart, Einstieg, Widgets (Marcos Wünsche)
+
+- **Fahrt nach Neustart:** App merkt sich die Fahrseite (`RideState.ridePath`, `startedAt`) und öffnet sie beim Kaltstart (≤ 12 h),
+  auch nach Neu-Anmeldung (`next`); Benachrichtigung → Fahrt (`MainActivity.ACTION_OPEN`). Server-Teil (start = fortsetzen, späte
+  Punkte anhängen, Teile verbinden): `docs/handoff/aufgaben-server-1.md` Teil 1.
+- **Einstieg an beliebiger Stelle:** Logik gehört in `navigate.js` + Server (Teil 2); M3 portiert sie danach.
+- **Widgets (M6 vorgezogen, auf Marcos Wunsch):** Abweichung vom Plan – Plattform-`AppWidgetProvider` + `RemoteViews` statt Glance,
+  Aktualisierung über `updatePeriodMillis` (30 min), beim Öffnen der App und per ↻ statt WorkManager: keine neue Bibliothek, lokal
+  prüfbar. Vier Widgets (`widget/Widgets.kt`): Freie Fahrt (sofort nutzbar), In der Nähe, Deine Herden, Was gibt's Neues – Daten von
+  `GET /api/app/summary` (Teil 3, Format dort). Der Geräteschlüssel wird jetzt auch ohne Fahrt geholt (CSRF aus `#app-texts`
+  über `BridgeProbe`, nie geloggt).
+
 ## Offene Entscheidungen für Marco
 
 1. `CONSENT_VERSION` – wann erhöhen (Vorschlag: einmal mit M5).

@@ -14,6 +14,12 @@ object RideState {
     @Volatile var active = false          // the rider has started ride mode / free ride and not stopped it
     @Volatile var title = "ElTouro"
     @Volatile var text = ""
+    @Volatile var ridePath = ""        // page of the running ride (/tour/<id>/go or /free) – opened again after a restart
+    @Volatile var startedAt = 0L
+
+    /** A ride the app should bring the rider back to: active, on a known page, started less than 12 h ago (the server's resume window). */
+    fun resumablePath(now: Long = System.currentTimeMillis()): String? =
+        if (active && ridePath.startsWith("/") && now - startedAt < 12 * 3600_000L) ridePath else null
 
     @Volatile var plugin: TrackerPlugin? = null
     @Volatile var service: TrackerService? = null
@@ -28,6 +34,8 @@ object RideState {
         active = p.getBoolean("active", false)
         title = p.getString("title", "ElTouro") ?: "ElTouro"
         text = p.getString("text", "") ?: ""
+        ridePath = p.getString("ridePath", "") ?: ""
+        startedAt = p.getLong("startedAt", 0L)
     }
 
     fun save(ctx: Context) {
@@ -38,6 +46,8 @@ object RideState {
             .putBoolean("active", active)
             .putString("title", title)
             .putString("text", text)
+            .putString("ridePath", ridePath)
+            .putLong("startedAt", startedAt)
             .apply()
     }
 }

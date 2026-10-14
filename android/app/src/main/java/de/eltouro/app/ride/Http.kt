@@ -5,6 +5,25 @@ import java.net.URL
 
 /** Minimal JSON POST (plain JVM). Never on the main thread. */
 object Http {
+    /** GET with short timeouts (widgets update inside a broadcast). */
+    fun get(url: String, headers: Map<String, String>): UploadResult = try {
+        val c = URL(url).openConnection() as HttpURLConnection
+        c.requestMethod = "GET"
+        c.connectTimeout = 8_000
+        c.readTimeout = 10_000
+        c.instanceFollowRedirects = false
+        c.setRequestProperty("Accept", "application/json")
+        for ((k, v) in headers) c.setRequestProperty(k, v)
+        val code = c.responseCode
+        val body = try {
+            (if (code in 200..299) c.inputStream else c.errorStream)?.bufferedReader()?.use { it.readText() }?.take(64_000) ?: ""
+        } catch (_: Exception) { "" }
+        c.disconnect()
+        UploadResult(code, body)
+    } catch (e: Exception) {
+        UploadResult(-1, "", e.javaClass.simpleName)
+    }
+
     fun postJson(url: String, json: String, headers: Map<String, String>): UploadResult = try {
         val c = URL(url).openConnection() as HttpURLConnection
         c.requestMethod = "POST"

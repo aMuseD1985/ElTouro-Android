@@ -54,7 +54,14 @@ class TrackerPlugin : Plugin() {
         RideState.csrf = call.getString("csrf", "") ?: ""
         RideState.title = call.getString("title", "ElTouro") ?: "ElTouro"
         RideState.text = call.getString("text", "") ?: ""
+        val previous = RideState.session
+        val wasActive = RideState.active
         RideState.session = call.getLong("session", 0L) ?: 0L
+        if (wasActive && previous > 0 && RideState.session > 0 && RideState.session != previous) {
+            Diag.log("page: NEW recording #${RideState.session} while #$previous was still open – the server splits the ride (docs/handoff/aufgaben-server-1.md)")
+        }
+        Diag.probe?.takeIf { it.ridePage }?.let { RideState.ridePath = it.path }
+        if (!wasActive || RideState.startedAt == 0L) RideState.startedAt = System.currentTimeMillis()
         if (RideState.service == null) Diag.resetRide()   // a new ride, not a second start() of a running one
         Diag.pageStartAt = System.currentTimeMillis()
         Diag.pageStartSession = RideState.session
@@ -92,6 +99,7 @@ class TrackerPlugin : Plugin() {
             RideState.save(context)
             ContextCompat.startForegroundService(context, Intent(context, TrackerService::class.java))
             call.resolve()
+            de.eltouro.app.widget.Widgets.renderAllAsync(context)
             activity?.let { a -> a.runOnUiThread { Setup.maybeShowHint(a) } }
         } catch (e: Exception) {
             Diag.log("page: service start failed – ${e.javaClass.simpleName}: ${e.message}")
@@ -140,10 +148,13 @@ class TrackerPlugin : Plugin() {
             flushBeforeFinish(svc)
             RideState.session = 0
             RideState.active = false
+            RideState.ridePath = ""
+            RideState.startedAt = 0L
             RideState.save(context)
             RideWatchdog.cancel(context)
             context.stopService(Intent(context, TrackerService::class.java))
             call.resolve()
+            de.eltouro.app.widget.Widgets.renderAllAsync(context)
         }.start()
     }
 

@@ -26,4 +26,16 @@
         <item name="colorPrimaryDark">#14263F</item>
         <item name="colorAccent">#D7A845</item>
     </style>
+
+    <!-- one entry in a list widget -->
+    <style name="WidgetRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:paddingTop">5dp</item>
+        <item name="android:paddingBottom">5dp</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:textColor">#E8ECF1</item>
+        <item name="android:textSize">13sp</item>
+    </style>
 </resources>

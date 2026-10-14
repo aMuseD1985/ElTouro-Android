@@ -72,6 +72,7 @@ class TrackerService : Service() {
     private var lastKeptAt = 0L
     @Volatile private var uploadedPoints = 0
     @Volatile private var displayOffSinceLastFix = false
+    private var whereSavedAt = 0L
     private var lastLoggedUpload = ""
 
     private val uploadTick = object : Runnable {
@@ -179,6 +180,10 @@ class TrackerService : Service() {
         val gap = Diag.fixes.onFix(System.currentTimeMillis(), l.accuracy, displayOnThrough)
         if (gap > 0) Diag.log("location: gap of ${gap / 1000} s ended (display ${if (displayOnThrough) "on" else "was off"})")
         Diag.lastAccuracyM = l.accuracy
+        if (System.currentTimeMillis() - whereSavedAt > 5 * 60_000L) {
+            whereSavedAt = System.currentTimeMillis()
+            de.eltouro.app.widget.WidgetData.saveWhere(this, l.latitude, l.longitude)
+        }
         RideState.plugin?.let { p ->
             val o = JSObject()
             o.put("lat", l.latitude)
@@ -336,6 +341,7 @@ class TrackerService : Service() {
 
     private fun buildNotification(): Notification {
         val open = Intent(this, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .setAction(MainActivity.ACTION_OPEN).putExtra(MainActivity.EXTRA_PATH, RideState.ridePath.ifEmpty { "/" })
         val pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val diag = PendingIntent.getActivity(this, 1, Intent(this, DiagnoseActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)

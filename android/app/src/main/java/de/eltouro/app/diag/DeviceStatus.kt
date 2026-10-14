@@ -76,6 +76,9 @@ object DeviceStatus {
         val key = DeviceKey.get(ctx)
         s += StatusLine(if (RideState.baseUrl.isNotEmpty()) key != null else null, ctx.getString(R.string.diag_device_key),
             if (key != null) key.take(8) + "…" else ctx.getString(R.string.diag_no))
+        val w = de.eltouro.app.widget.WidgetData.state(ctx)
+        s += StatusLine(when (w.status) { de.eltouro.app.widget.WidgetData.Status.OK -> true; de.eltouro.app.widget.WidgetData.Status.NEVER -> null; else -> false },
+            ctx.getString(R.string.diag_widgets), w.status.name.lowercase() + (if (w.fetchedAt > 0) " · " + ctx.getString(R.string.diag_ago, formatDuration(now - w.fetchedAt)) else ""))
         s += StatusLine(null, ctx.getString(R.string.login_last),
             if (Diag.loginAt > 0) Diag.loginLast + " · " + ctx.getString(R.string.diag_ago, formatDuration(now - Diag.loginAt)) else "—")
         return s
