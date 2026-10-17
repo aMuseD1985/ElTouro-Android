@@ -16,6 +16,7 @@ JS-Seite: `assets/native_tracker.js` im Web-Repo (`window.ElTouroNative`). Nativ
 | `clearSession` | – | 0.1 | Aufzeichnung aus, Rest hochladen |
 | `stop` | – | 0.1 | Rest hochladen, Dienst beenden, Fahrt nicht mehr aktiv |
 | `batterySettings` | – | 0.1 | Akku-Optimierung (seit 0.2 direkter Systemdialog) |
+| `setNotification` | `{title, text}` | 0.4 (gewünscht) | Text der Fahrt-Benachrichtigung ersetzen – die Seite schickt damit die nächste Abbiegung („300 m · Links abbiegen“) höchstens alle 2 s; Apps ohne die Methode werden von der Seite per Feature-Erkennung übersprungen |
 | `openExternal` | `{url}` (nur `https://`) | 0.1 | Custom Tab, z. B. Google-Anmeldung |
 | `getRemember` / `setRemember` / `clearRemember` | `{token}` (64 hex) | 0.1 | „Angemeldet bleiben“; `clearRemember` widerruft seit 0.3 auch den Geräteschlüssel |
 | `log` | `{msg}` | 0.2 | Zeile ins Diagnose-Log (max. 60/min, 300 Zeichen) |
@@ -28,10 +29,6 @@ Ereignis `location`: `{lat, lng, acc, heading?, speedMs?, t}` (jede Position, so
 (`CookieHop`) statt über die WebView, weil Capacitors Proxy das Cookie einer Weiterleitung verliert. Kommt im Web-Repo eine
 weitere GET-Seite dazu, die Cookies setzt und weiterleitet, muss sie in `CookieHop.SIGN_IN_PATHS` (oder als POST gebaut werden).
 
-**App erkennen:** Die App hängt `ElTouroApp/<n>` an ihren User-Agent (ab `versionCode` 1011). Der Server lässt damit
-Browser-Hinweise („Display an lassen“) und die Fußzeile angemeldeter Fahrer weg (`isApp()`), Rechtliches steht im Profil
-(„§§ Rechtliches“). Für ältere APKs: Klasse `is-app` an `<html>` (aus `app-pref.js`), `.web-only` wird ausgeblendet.
-
 Die App fragt außerdem jede geladene Seite per `evaluateJavascript` ab (`BridgeProbe` – Diagnose): `location.pathname`,
 `window.ElTouroNative.available()`, `Capacitor.isNativePlatform()` und `document.getElementById('app-texts').dataset.user`
 (`'1'` = angemeldet). Diese Namen bitte nicht ändern.
@@ -40,12 +37,12 @@ Die App fragt außerdem jede geladene Seite per `evaluateJavascript` ab (`Bridge
 
 | Endpunkt | Auth | Inhalt |
 |---|---|---|
-| `POST /api/track` | Geräteschlüssel (`Authorization: Bearer eld_…` **und** `X-Device-Token`) oder Session-Cookie + `X-CSRF` | `{"action":"points","session_id":n,"points":[[unixMs,lat,lng,acc,kmh\|null],…]}` → `{"stored":n}`; höchstens 600 Punkte (`TRACK_MAX_BATCH`) |
-| `GET /api/app/summary?v=1[&lat&lng]` | Geräteschlüssel | Übersicht für die Widgets – Format in `docs/handoff/aufgaben-server-1.md` (Teil 3); 404 = noch nicht da |
+| `POST /api/track` (`start` setzt eine offene Aufzeichnung derselben Tour fort: `resumed: true` + Punkte; `fresh: true` = neue Fahrt; späte Punkte bis 24 h nach dem Ende werden angehängt) | Geräteschlüssel (`Authorization: Bearer eld_…` **und** `X-Device-Token`) oder Session-Cookie + `X-CSRF` | `{"action":"points","session_id":n,"points":[[unixMs,lat,lng,acc,kmh\|null],…]}` → `{"stored":n}`; höchstens 600 Punkte (`TRACK_MAX_BATCH`) |
 | `POST /api/app/device` | Session + `X-CSRF` | `{"action":"register","version":"…"}` → `{"token":"eld_…"}` |
 | `POST /api/app/device` | Geräteschlüssel | `{"action":"check"}` → `{"ok":true}`; `{"action":"revoke"}` |
 | `POST /api/app/remember` | Session + `X-CSRF` | → `{"token": 64 hex}` (holt die Seite, speichert die App) |
 | `GET /auth/app?t=…&next=…` / `?r=…` | Einmal-Token / Remember-Token | meldet die WebView an; die App selbst ruft `?r=` beim Start, wenn das Cookie `eltouro_sid` fehlt |
+| `GET /api/app/summary?v=1[&lat=&lng=]` | Geräteschlüssel (`Authorization: Bearer eld_…` / `X-Device-Token`) | Übersicht für die Widgets: `ride`, `near` (Ausfahrten/Touren im Umkreis), `herds` (ungelesen), `news`, `unread_total` – Position, falls gesendet, auf 2 Nachkommastellen, nicht gespeichert |
 | `GET /auth/app-return` | – | Ende der Google-Anmeldung im Browser → `de.eltouro.app://login?t=…&next=…` |
 
 Antworten, auf die sich die App verlässt (`Uploader`): 2xx = angekommen; `404`/`409` = Session unbekannt/nicht mehr offen →
